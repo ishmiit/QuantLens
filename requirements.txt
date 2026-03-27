@@ -8,7 +8,7 @@ joblib
 requests
 cachetools
 python-dotenv
-upstox-python
+upstox-python-sdk
 pyotp
 selenium
 webdriver-manager
