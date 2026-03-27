@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+
+# Java
+target/
+*.class
+.mvn/
+
+# React / JS
+node_modules/
+dist/
+.env
+
+# VS Code
+.vscode/
