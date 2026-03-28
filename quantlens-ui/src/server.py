@@ -37,8 +37,11 @@ app.add_middleware(
     allow_origins=["https://quant-lens.vercel.app/"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
 )
+
+@app.get('/health')
+async def health_check():
+    return {'status': 'awake'}
 
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "quantlens"),
@@ -835,9 +838,8 @@ async def delete_individual_trade(symbol: str):
         
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # STEP 1: Accept the handshake IMMEDIATELY — nothing else before this
     await websocket.accept()
-    print("✅ WebSocket Connection Accepted")
+    print("🟢 WebSocket Connection Accepted")
     
     conn = None
     try:
@@ -927,10 +929,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("ℹ️ WebSocket Connection Closed by Client.")
     except Exception as e:
-        import traceback
-        print(f"❌ Critical WebSocket Failure: {str(e)}")
-        traceback.print_exc() 
+        print(f"🔴 WebSocket Error: {e}")
     finally:
+        print("🔌 WebSocket Closed")
         if conn and not conn.closed:
             conn.close()
             print("🔌 DB Connection Closed for WebSocket session")
