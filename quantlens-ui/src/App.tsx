@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
+// @ts-ignore
 import { API_URL, WS_URL } from './config';
 
 interface Stock {
