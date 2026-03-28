@@ -12,7 +12,11 @@ def get_access_token():
     auth_url = f"https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id={config.API_KEY}&redirect_uri={config.REDIRECT_URI}"
     
     options = Options()
-    # options.add_argument("--headless") 
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
     options.add_argument("--incognito") 
     options.add_argument("--disable-blink-features=AutomationControlled") 
     
