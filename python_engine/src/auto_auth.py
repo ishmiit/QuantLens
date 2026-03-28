@@ -44,14 +44,22 @@ def get_access_token():
         otp_field = wait.until(EC.presence_of_element_located((By.ID, "otpNum")))
         
         # Generate TOTP code
-        totp = pyotp.TOTP(config.TOTP_KEY.replace(" ", ""))
-        otp_value = totp.now()
+        totp_secret = os.getenv('UPSTOX_TOTP_SECRET')
+        if not totp_secret:
+            print("❌ CRITICAL: UPSTOX_TOTP_SECRET is missing from environment variables.")
+            sys.exit(1)
+        
+        # Safely remove spaces in case the user pasted it with spaces
+        totp_secret = totp_secret.replace(' ', '')
+        
+        totp = pyotp.TOTP(totp_secret)
+        current_pin = totp.now()
         
         # Clear the field first just in case
         otp_field.clear()
         
         # Type each digit one-by-one with a tiny delay
-        for digit in otp_value:
+        for digit in current_pin:
             otp_field.send_keys(digit)
             time.sleep(0.2) # 200ms delay between keystrokes
         
