@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const isProd = import.meta.env.PROD;
-const WS_URL = import.meta.env.VITE_WS_URL || (isProd ? API_URL.replace(/^http/, 'ws') : 'ws://localhost:8000');
+import { API_URL, WS_URL } from './config';
 
 interface Stock {
   symbol: string;
