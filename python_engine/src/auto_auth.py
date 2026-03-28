@@ -1,4 +1,5 @@
 import pyotp, time, requests, config
+import sys
 import os, psycopg2
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -19,6 +20,7 @@ def get_access_token():
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--incognito") 
     options.add_argument("--disable-blink-features=AutomationControlled") 
+    options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     wait = WebDriverWait(driver, 15)
@@ -29,7 +31,7 @@ def get_access_token():
         
         # 1. Mobile Number
         print("🔗 Step 1: Entering Mobile Number...")
-        mobile_field = wait.until(EC.element_to_be_clickable((By.ID, "mobileNum")))
+        mobile_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "mobileNum")))
         mobile_field.send_keys(config.MOBILE_NO)
         time.sleep(1) # Small pause before clicking
         driver.find_element(By.ID, "getOtp").click()
@@ -129,6 +131,8 @@ def get_access_token():
             
     except Exception as e:
         print(f"❌ Automation Error: {e}")
+        driver.save_screenshot('error_screenshot.png')
+        sys.exit(1)
     finally:
         driver.quit()
     return None

@@ -33,3 +33,10 @@ jobs:
         UPSTOX_TOTP_SECRET: ${{ secrets.UPSTOX_TOTP_SECRET }}
       run: |
         python python_engine/src/auto_auth.py
+
+    - name: Upload Error Screenshot
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: error-screenshot
+        path: error_screenshot.png
