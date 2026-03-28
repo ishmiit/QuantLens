@@ -31,17 +31,20 @@ INITIAL_CAPITAL = 100000.0
 
 app = FastAPI()
 
-# --- CORS MIDDLEWARE ---
+# Get frontend URL from env, fallback to vercel
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://quant-lens.vercel.app")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://quant-lens.vercel.app/"],
+    allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.get('/health')
+@app.get("/health")
 async def health_check():
-    return {'status': 'awake'}
+    return {"status": "awake"}
 
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "quantlens"),
