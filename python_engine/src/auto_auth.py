@@ -1,4 +1,5 @@
 import pyotp, time, requests, config
+import os, psycopg2
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -87,6 +88,37 @@ def get_access_token():
             with open("token.txt", "w") as f:
                 f.write(token)
             print("✅ SUCCESS: Token saved to token.txt")
+            
+            # Persist to Database if DATABASE_URL is available
+            db_url = os.getenv("DATABASE_URL")
+            if db_url:
+                try:
+                    print("💾 Saving token to PostgreSQL database...")
+                    conn = psycopg2.connect(db_url)
+                    cur = conn.cursor()
+                    cur.execute('''
+                        CREATE TABLE IF NOT EXISTS system_config (
+                            key VARCHAR(50) PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
+                    cur.execute('''
+                        INSERT INTO system_config (key, value, updated_at) 
+                        VALUES ('UPSTOX_TOKEN', %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (key) DO UPDATE SET 
+                            value = EXCLUDED.value,
+                            updated_at = EXCLUDED.updated_at
+                    ''', (token,))
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                    print("✅ SUCCESS: Token securely saved to database.")
+                except Exception as e:
+                    print(f"❌ Database error: {e}")
+            else:
+                print("⚠️ DATABASE_URL not found. Skipping database persistence.")
+
             return token
         else:
             print(f"❌ Token Exchange Failed: {res}")
