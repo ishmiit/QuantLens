@@ -99,6 +99,7 @@ function App() {
   const [aiTargetPercent, setAiTargetPercent] = useState(5.0);
   const [isAuditing, setIsAuditing] = useState(false); // New: Tracks scanning state
   const [forgeSignal, setForgeSignal] = useState<'BUY' | 'SELL'>('BUY');
+  const [isServerAwake, setIsServerAwake] = useState(false);
 
 
   // --- NEW: ML AUDIT ENGINE (CONNECTED TO BACKEND) ---
@@ -304,6 +305,22 @@ function App() {
     let isMounted = true;
     let retryCount = 0;
 
+    const wakeUpServer = async () => {
+      if (!isMounted) return;
+      try {
+        const res = await fetch(`${API_URL}/health`);
+        if (res.ok) {
+          setIsServerAwake(true);
+          connectToWebsocket();
+        } else {
+          throw new Error("Server not ready");
+        }
+      } catch (error) {
+        console.log("Server waking up or unreachable, retrying in 3s...");
+        setTimeout(wakeUpServer, 3000);
+      }
+    };
+
     const connectToWebsocket = () => {
       if (!isMounted) return;
 
@@ -386,7 +403,7 @@ function App() {
       };
     };
 
-    connectToWebsocket();
+    wakeUpServer();
 
     return () => {
       isMounted = false;
@@ -449,6 +466,16 @@ function App() {
   };
 
   const cleanSymbol = (sym: string) => sym.split(':').pop()?.split('.')[0] || sym;
+
+  if (!isServerAwake) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-black text-white font-mono">
+        <div className="w-12 h-12 border-4 border-[#39ff14] border-t-transparent rounded-full animate-spin mb-4" />
+        <h1 className="text-xl font-black tracking-widest text-[#39ff14] mb-2">QUANT<span className="text-white">LENS</span></h1>
+        <p className="text-zinc-500 text-xs tracking-[0.2em] animate-pulse">WAKING UP SERVER...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-black text-white font-mono overflow-hidden">
