@@ -31,6 +31,8 @@ jobs:
         UPSTOX_API_SECRET: ${{ secrets.UPSTOX_API_SECRET }}
         UPSTOX_REDIRECT_URI: ${{ secrets.UPSTOX_REDIRECT_URI }}
         UPSTOX_TOTP_SECRET: ${{ secrets.UPSTOX_TOTP_SECRET }}
+        UPSTOX_MOBILE_NO: ${{ secrets.UPSTOX_MOBILE_NO }}
+        UPSTOX_PIN: ${{ secrets.UPSTOX_PIN }}
       run: |
         python python_engine/src/auto_auth.py
 
