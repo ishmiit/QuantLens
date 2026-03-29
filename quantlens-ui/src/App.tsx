@@ -574,7 +574,8 @@ function App() {
       </nav>
 
       <main className="flex-1 overflow-y-auto p-6 pb-24 space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
-        <div className="grid grid-cols-3 gap-6 shrink-0">
+        {/* DESKTOP INDICES VIEW */}
+        <div className="hidden md:grid grid-cols-3 gap-6 shrink-0">
           {[
             { label: 'NIFTY 50', key: 'NIFTY_50' },
             { label: 'SENSEX', key: 'SENSEX' },
@@ -584,17 +585,36 @@ function App() {
             return (
               <div
                 key={idx.label}
-                className="bg-gradient-to-br from-[#0d1117] to-black border border-accent-green/10 p-5 rounded-2xl hover:border-accent-green/30 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+                className="bg-black border border-gray-800 p-5 rounded-2xl shadow-sm"
               >
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{idx.label}</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">{idx.label}</span>
                 <div className="flex justify-between items-end mt-1">
                   <span className="text-2xl font-bold tabular-nums">
                     {data ? <PriceDisplay price={data.price ?? 0} className="text-white" /> : <span className="text-white">---</span>}
                   </span>
-                  <span className={`text-xs font-black ${data && (data.change_percent ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                  <span className={`text-xs font-black ${data && (data.change_percent ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {data ? `${(data.change_percent ?? 0) >= 0 ? '+' : ''}${(data.change_percent ?? 0).toFixed(2)}%` : '0.00%'}
                   </span>
                 </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* MOBILE INDICES STRIP */}
+        <div className="flex md:hidden flex-row justify-between w-full px-2 py-2 bg-black/40 backdrop-blur-md border-b border-gray-800 shrink-0">
+          {[
+            { label: 'NIFTY', key: 'NIFTY_50' },
+            { label: 'SENSEX', key: 'SENSEX' },
+            { label: 'BANK', key: 'NIFTY_BANK' },
+          ].map((idx) => {
+            const data = getIndexData(idx.key);
+            return (
+              <div key={idx.label} className="flex flex-row items-baseline gap-2">
+                <span className="text-[10px] text-gray-400 uppercase">{idx.label}</span>
+                <span className="text-xs font-mono font-bold text-white">
+                  {data ? data.price?.toLocaleString('en-IN') : '---'}
+                </span>
               </div>
             );
           })}
@@ -1018,58 +1038,42 @@ function App() {
                 {/* HERO PANEL: CONFIDENCE */}
                 {(() => {
                   const confValue = forgeMetrics?.probability || 0;
-                  let confColor = 'text-accent-red';
-                  let glowClass = 'shadow-[0_0_30px_rgba(255,49,49,0.1)] border-accent-red/20';
-                  let barColor = 'bg-accent-red';
+                  let confColor = 'text-red-500';
+                  let boxClass = 'border-red-500/20 bg-red-500/5';
                   let statusText = 'LOW PROBABILITY';
 
                   if (confValue > 80) {
-                    confColor = 'text-accent-green';
-                    glowClass = 'shadow-[0_0_40px_rgba(57,255,20,0.15)] border-accent-green/40';
-                    barColor = 'bg-accent-green shadow-[0_0_15px_#39ff14]';
+                    confColor = 'text-green-500';
+                    boxClass = 'border-green-500/20 bg-green-500/5';
                     statusText = 'HIGH CONVICTION';
                   } else if (confValue > 50) {
-                    confColor = 'text-yellow-400';
-                    glowClass = 'shadow-[0_0_30px_rgba(250,204,21,0.1)] border-yellow-400/30';
-                    barColor = 'bg-yellow-400';
+                    confColor = 'text-yellow-500';
+                    boxClass = 'border-yellow-500/20 bg-yellow-500/5';
                     statusText = 'NEUTRAL / WATCH';
                   }
 
                   if (!forgeMetrics && !isAuditing) {
-                    confColor = 'text-zinc-700';
-                    glowClass = 'border-zinc-800';
-                    barColor = 'bg-zinc-800';
+                    confColor = 'text-gray-500';
+                    boxClass = 'border-gray-800 bg-black';
                     statusText = 'AWAITING INPUT';
                   }
 
                   return (
-                    <div className={`bg-zinc-950 border ${glowClass} p-8 shrink-0 relative overflow-hidden flex flex-col justify-center items-center h-56 transition-all duration-500`}>
-                      <div className="absolute top-4 left-4">
-                        <span className="text-[10px] text-zinc-500 font-bold tracking-[0.2em] uppercase">QUANT MODEL ODDS</span>
-                      </div>
-                      <div className="absolute top-4 right-4">
-                        <span className={`text-[10px] font-black tracking-widest ${confColor}`}>{isAuditing ? 'CALCULATING...' : statusText}</span>
-                      </div>
-
-                      <div className="flex items-baseline gap-2 z-10 mt-2">
-                        <span className={`text-8xl xl:text-9xl font-black tabular-nums tracking-tighter transition-colors duration-500 ${isAuditing ? 'text-zinc-700 animate-pulse' : confColor}`}>
+                    <div className={`p-6 shrink-0 rounded-md border text-center flex flex-col justify-center items-center transition-all ${boxClass}`}>
+                      <span className="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase mb-2">QUANT MODEL ODDS</span>
+                      <div className="flex items-baseline gap-1 my-2">
+                        <span className={`text-4xl font-extrabold tabular-nums tracking-tight ${isAuditing ? 'text-gray-600 animate-pulse' : confColor}`}>
                           {isAuditing ? '--' : confValue}
                         </span>
-                        <span className={`text-4xl font-bold ${isAuditing ? 'text-zinc-800' : 'text-zinc-500'}`}>%</span>
+                        <span className={`text-xl font-bold ${isAuditing ? 'text-gray-700' : 'text-gray-500'}`}>%</span>
                       </div>
-
-                      {/* Progress Bar */}
-                      <div className="absolute bottom-0 left-0 w-full h-2 bg-black">
-                        <div className={`h-full transition-all duration-1000 ease-out flex items-center justify-end ${isAuditing ? 'w-full bg-yellow-500/50 animate-pulse' : barColor}`} style={{ width: isAuditing ? '100%' : `${confValue}%` }}>
-                          {confValue > 0 && !isAuditing && <div className="w-1 h-2 bg-white opacity-50"></div>}
-                        </div>
-                      </div>
+                      <span className={`text-[10px] font-black tracking-widest uppercase ${confColor}`}>{isAuditing ? 'CALCULATING...' : statusText}</span>
                     </div>
                   );
                 })()}
 
                 {/* HIGH-DENSITY DATA STRIP (Secondary Metrics) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-zinc-800 border border-zinc-800 flex-1 overflow-y-auto custom-scrollbar">
+                <div className="grid grid-cols-2 gap-3 mt-4 flex-1 overflow-y-auto custom-scrollbar">
                   {[
                     { label: 'Momentum (RSI)', val: forgeMetrics?.rsi?.toFixed(1) || '0.0', desc: (forgeMetrics?.rsi > 60 ? 'Strong' : 'Neutral'), hl: forgeMetrics?.rsi > 60 },
                     { label: 'Rel Volume', val: forgeMetrics?.rvol?.toFixed(2) || '0.00', desc: 'Flow Divergence', hl: forgeMetrics?.rvol > 1.5 },
@@ -1080,13 +1084,13 @@ function App() {
                     { label: 'Sector Group', val: forgeMetrics?.sector || 'N/A', desc: 'Beta Category', hl: false },
                     { label: 'Signal Str', val: forgeMetrics?.signal_strength || 'N/A', desc: 'Alpha Factor', hl: false },
                   ].map((box, i) => (
-                    <div key={i} className="bg-black p-4 flex flex-col justify-between hover:bg-zinc-900 transition-colors">
-                      <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-2">{box.label}</span>
+                    <div key={i} className="bg-gray-900 border border-gray-800 p-3 rounded-md overflow-hidden flex flex-col justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 truncate">{box.label}</span>
                       <div>
-                        <span className={`text-xl font-mono block mb-1 ${isAuditing ? 'text-zinc-700 animate-pulse' : (box.hl ? 'text-white' : 'text-zinc-300')}`}>
+                        <span className={`text-sm font-mono block truncate ${isAuditing ? 'text-gray-700 animate-pulse' : (box.hl ? 'text-white' : 'text-gray-300')}`}>
                           {isAuditing ? '---' : box.val}
                         </span>
-                        <span className="text-[8px] text-zinc-600 uppercase tracking-widest">{isAuditing ? 'SCANNING' : box.desc}</span>
+                        <span className="text-[10px] text-gray-600 uppercase tracking-widest block truncate">{isAuditing ? 'SCANNING' : box.desc}</span>
                       </div>
                     </div>
                   ))}
@@ -1129,13 +1133,13 @@ function App() {
                   {/* INPUTS GRID */}
                   <div className="space-y-4">
                     <div>
-                      <div className="flex justify-between text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                      <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                         <span>Limit Entry Price</span>
                         <span>(INR)</span>
                       </div>
                       <input
                         type="number" step="0.05"
-                        className="w-full bg-black border border-zinc-800 px-3 py-3 text-right text-xl text-accent-green font-mono focus:border-accent-green outline-none transition-colors"
+                        className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-sm text-white font-mono outline-none focus:border-blue-500 transition-colors"
                         value={forgeEntry}
                         onChange={(e) => setForgeEntry(e.target.value === '' ? '' : parseFloat(e.target.value))}
                         onFocus={(e) => e.target.select()}
@@ -1144,33 +1148,33 @@ function App() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <div className="flex justify-between text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                        <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                           <span>Stop Loss</span>
-                          <span className="text-accent-red">{(aiSlPercent).toFixed(1)}%</span>
+                          <span className="text-red-500">{(aiSlPercent).toFixed(1)}%</span>
                         </div>
-                        <div className="w-full bg-zinc-900 border border-zinc-800 px-3 py-3 text-right text-base text-accent-red font-mono">
+                        <div className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-right text-sm text-red-500 font-mono">
                           {calculatedSL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                       <div>
-                        <div className="flex justify-between text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                        <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                           <span>Target</span>
-                          <span className="text-accent-green">{(aiTargetPercent).toFixed(1)}%</span>
+                          <span className="text-green-500">{(aiTargetPercent).toFixed(1)}%</span>
                         </div>
-                        <div className="w-full bg-zinc-900 border border-zinc-800 px-3 py-3 text-right text-base text-accent-green font-mono">
+                        <div className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-right text-sm text-green-500 font-mono">
                           {calculatedTarget.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                      <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                         <span>Order Quantity</span>
                         <span>(Units)</span>
                       </div>
                       <input
                         type="number"
-                        className="w-full bg-black border border-zinc-800 px-3 py-3 text-right text-xl text-white font-mono focus:border-accent-green outline-none transition-colors"
+                        className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-sm text-white font-mono outline-none focus:border-blue-500 transition-colors"
                         value={forgeQty}
                         onChange={(e) => setForgeQty(e.target.value === '' ? '' : parseInt(e.target.value))}
                         onFocus={(e) => e.target.select()}
@@ -1203,24 +1207,24 @@ function App() {
                 </div>
 
                 {/* ACTION BUTTONS */}
-                <div className="p-3 bg-zinc-900 border-t border-zinc-800 grid grid-cols-2 gap-2">
-                  <button
-                    onClick={handleVirtualForge}
-                    className="bg-black border border-zinc-700 text-zinc-300 py-4 text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-colors"
-                  >
-                    VIRTUAL FORGE
-                  </button>
+                <div className="p-4 bg-black border-t border-gray-800 flex flex-col gap-3">
                   <button
                     onClick={executeLiveTrade}
                     disabled={!forgeMetrics || isAuditing}
-                    className={`py-4 text-[10px] font-bold uppercase tracking-widest transition-all ${!forgeMetrics || isAuditing
-                      ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                      : (forgeMetrics?.probability > 80
-                        ? 'bg-accent-green text-black hover:bg-[#32e612] shadow-[0_0_15px_rgba(57,255,20,0.3)]'
-                        : 'bg-yellow-500 text-black hover:bg-yellow-400')
+                    className={`w-full py-3 rounded-md text-sm font-semibold uppercase tracking-wider transition-all ${!forgeMetrics || isAuditing
+                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                      : (forgeSignal === 'BUY'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-red-600 text-white hover:bg-red-700')
                       }`}
                   >
-                    {isAuditing ? "ANALYZING..." : `EXECUTE (${forgeMetrics?.probability || 0}%)`}
+                    {isAuditing ? "ANALYZING..." : `${forgeSignal} (${forgeMetrics?.probability || 0}%)`}
+                  </button>
+                  <button
+                    onClick={handleVirtualForge}
+                    className="w-full bg-transparent border border-gray-600 text-gray-300 py-3 rounded-md text-sm font-semibold uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                  >
+                    VIRTUAL FORGE
                   </button>
                 </div>
               </div>
@@ -1232,22 +1236,17 @@ function App() {
 
       {/* --- MOBILE BOTTOM NAVIGATION --- */}
       <div className="flex md:hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-[400px] h-16 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl z-50 items-center justify-evenly px-2">
-        {[
-          { id: 'dashboard', icon: '📊', label: 'DASHBOARD' }, 
-          { id: 'convictions', icon: '🎯', label: 'CONVICTIONS' }, 
-          { id: 'forge', icon: '🛠️', label: 'FORGE' }
-        ].map((v) => (
+        {['dashboard', 'convictions', 'forge'].map((v) => (
           <button
-            key={v.id}
-            onClick={() => setView(v.id as any)}
-            className={`flex flex-col items-center justify-center w-full h-full rounded-full transition-all duration-300 ${
-              view === v.id
-              ? 'text-accent-green drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] scale-105'
-              : 'text-zinc-500 hover:text-zinc-300'
+            key={v}
+            onClick={() => setView(v as any)}
+            className={`flex flex-col items-center justify-center flex-1 h-3/4 mx-1 rounded-full transition-all duration-300 ${
+              view === v
+              ? 'bg-white text-black font-bold shadow-lg'
+              : 'text-gray-400 font-semibold hover:text-white'
             }`}
           >
-            <span className="text-xl mb-0.5">{v.icon}</span>
-            <span className="text-[6px] font-bold tracking-[0.2em]">{v.label}</span>
+            <span className="text-[10px] tracking-widest uppercase">{v.slice(0, 4)}</span>
           </button>
         ))}
       </div>
