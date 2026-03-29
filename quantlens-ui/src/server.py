@@ -31,12 +31,13 @@ INITIAL_CAPITAL = 100000.0
 
 app = FastAPI()
 
-# Get frontend URL from env, fallback to vercel
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://quant-lens.vercel.app")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "https://quant-lens.vercel.app", 
+        "http://localhost:5173", 
+        "http://localhost:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
