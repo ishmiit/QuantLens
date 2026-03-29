@@ -64,9 +64,11 @@ def startup_event():
     print("🟢 SERVER READY")
     
     # --- PHASE 1: DATABASE SCHEMA ---
+    import sys
     conn = None
     try:
         conn = get_db_connection()
+        print("🟢 Neon Database Connection Successful!")
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS active_trades (
@@ -89,11 +91,10 @@ def startup_event():
         conn.commit()
         cur.close()
         print("✅ DB Schema Verified & Hardened: init_vol_rupees and entry_time columns ensured.")
+    except psycopg2.Error as e:
+        print(f"🔴 CRITICAL DB ERROR: {str(e)}")
     except Exception as e:
-        import traceback
-        print(f"❌ CRITICAL: DB Schema Error during startup: {e}")
-        traceback.print_exc()
-        print("⚠️ Server will continue but DB features may be broken.")
+        print(f"🔴 UNKNOWN DB ERROR: {str(e)}")
     finally:
         if conn:
             conn.close()
