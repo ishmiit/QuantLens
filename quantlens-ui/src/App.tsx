@@ -1230,6 +1230,28 @@ function App() {
 
       </main>
 
+      {/* --- MOBILE BOTTOM NAVIGATION --- */}
+      <div className="flex md:hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-[400px] h-16 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl z-50 items-center justify-evenly px-2">
+        {[
+          { id: 'dashboard', icon: '📊', label: 'DASHBOARD' }, 
+          { id: 'convictions', icon: '🎯', label: 'CONVICTIONS' }, 
+          { id: 'forge', icon: '🛠️', label: 'FORGE' }
+        ].map((v) => (
+          <button
+            key={v.id}
+            onClick={() => setView(v.id as any)}
+            className={`flex flex-col items-center justify-center w-full h-full rounded-full transition-all duration-300 ${
+              view === v.id
+              ? 'text-accent-green drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] scale-105'
+              : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <span className="text-xl mb-0.5">{v.icon}</span>
+            <span className="text-[6px] font-bold tracking-[0.2em]">{v.label}</span>
+          </button>
+        ))}
+      </div>
+
       <style>{`
         @keyframes slideIn {
           from { transform: translateX(100%); opacity: 0; }
