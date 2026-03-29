@@ -298,57 +298,43 @@ def fetch_historical_data(clean_symbol, conn):
 async def get_market_quotes():
     conn = None
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
-        token_row = cur.fetchone()
-        if not token_row:
-            return []
-        access_token = token_row[0]
-        
-        keys_to_fetch = []
-        reverse_map = {}
-        for sym in RAW_SYMBOLS:
-            clean_sym = sym.split("|")[-1]
+        valid_keys = []
+        for symbol in RAW_SYMBOLS:
+            clean_sym = symbol.split("|")[-1]
             if clean_sym == "Nifty%50": clean_sym = "NIFTY_50"
             elif clean_sym == "Nifty Bank": clean_sym = "NIFTY_BANK"
             elif clean_sym == "SENSEX": clean_sym = "SENSEX"
             
-            ikey = get_instrument_key(clean_sym)
-            if ikey:
-                keys_to_fetch.append(ikey)
-                reverse_map[ikey] = clean_sym
+            # Safely get the key, handling potential missing entries
+            key = get_instrument_key(clean_sym)
+            if key:
+                valid_keys.append(key)
                 
-        if not keys_to_fetch:
-            return []
+        if not valid_keys:
+            return {"error": "No valid instrument keys found to fetch."}
             
-        url = "https://api.upstox.com/v2/market-quote/quotes"
-        params = {"instrument_key": ",".join(keys_to_fetch)}
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}"
-        }
-        res = requests.get(url, params=params, headers=headers)
+        joined_keys = ",".join(valid_keys)
         
-        if res.status_code != 200:
-            return []
-            
-        data = res.json().get("data", {})
-        results = []
-        for ikey, quote in data.items():
-            sym = reverse_map.get(ikey, ikey)
-            results.append({
-                "symbol": sym,
-                "price": quote.get("last_price", 0),
-                "changePercent": quote.get("net_change", 0)
-            })
-            
-        return results
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
+        token_row = cur.fetchone()
+        if not token_row:
+            return {"error": "UPSTOX_TOKEN missing"}
+        access_token = token_row[0]
+        
+        url = f"https://api.upstox.com/v2/market-quote/quotes?instrument_key={joined_keys}"
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        response = requests.get(url, headers=headers)
+        return response.json()
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return []
+        return {"error": str(e)}
     finally:
         if conn: conn.close()
 
