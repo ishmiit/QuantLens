@@ -536,7 +536,7 @@ function App() {
         ))}
       </div>
 
-      <nav className="flex items-center justify-between h-16 bg-gradient-to-r from-black via-zinc-950 to-black border-b border-accent-green/20 px-8 shrink-0 shadow-[0_4px_24px_rgba(57,255,20,0.1)]">
+      <nav className="hidden md:flex items-center justify-between h-16 bg-gradient-to-r from-black via-zinc-950 to-black border-b border-accent-green/20 px-8 shrink-0 shadow-[0_4px_24px_rgba(57,255,20,0.1)]">
         <div className="flex items-center w-1/4">
           <div className="flex flex-col">
             <span className="text-xl font-black tracking-tighter text-white">
@@ -573,7 +573,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
+      <main className="flex-1 overflow-y-auto p-6 pb-24 space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
         <div className="grid grid-cols-3 gap-6 shrink-0">
           {[
             { label: 'NIFTY 50', key: 'NIFTY_50' },
@@ -584,7 +584,7 @@ function App() {
             return (
               <div
                 key={idx.label}
-                className="bg-gradient-to-br from-[#0d1117] to-black border border-accent-green/10 p-5 rounded-xl hover:border-accent-green/30 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+                className="bg-gradient-to-br from-[#0d1117] to-black border border-accent-green/10 p-5 rounded-2xl hover:border-accent-green/30 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
               >
                 <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{idx.label}</span>
                 <div className="flex justify-between items-end mt-1">
