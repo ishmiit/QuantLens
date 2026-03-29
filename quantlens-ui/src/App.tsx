@@ -105,6 +105,18 @@ function App() {
   // --- NEW: ML AUDIT ENGINE (CONNECTED TO BACKEND) ---
   const [forgeMetrics, setForgeMetrics] = useState<any>(null); // State to hold real feature data
 
+  // --- WEEKEND MARKET QUOTES REST FALLBACK ---
+  useEffect(() => {
+    fetch(`${API_URL}/api/market-quotes`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setStocks(data);
+        }
+      })
+      .catch(err => console.error("REST Fallback Error:", err));
+  }, []);
+
   const handleCloseTrade = async (symbol: string, tradeId?: number) => {
     try {
       // Hit the new persistent deletion route

@@ -246,6 +246,65 @@ def fetch_historical_data(clean_symbol, conn):
         print(f"❌ Error fetching historical for {clean_symbol}: {e}")
     return pd.DataFrame()
 
+# --- WEEKEND API FALLBACK ---
+@app.get("/api/market-quotes")
+async def get_market_quotes():
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
+        token_row = cur.fetchone()
+        if not token_row:
+            return []
+        access_token = token_row[0]
+        
+        cur.execute("SELECT symbol FROM ticker_live")
+        db_symbols = [r[0] for r in cur.fetchall()]
+        if not db_symbols:
+            return []
+            
+        keys_to_fetch = []
+        reverse_map = {}
+        for sym in db_symbols:
+            ikey = get_instrument_key(sym)
+            if ikey:
+                keys_to_fetch.append(ikey)
+                reverse_map[ikey] = sym
+                
+        if not keys_to_fetch:
+            return []
+            
+        url = "https://api.upstox.com/v2/market-quote/quotes"
+        params = {"instrument_key": ",".join(keys_to_fetch)}
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        res = requests.get(url, params=params, headers=headers)
+        
+        if res.status_code != 200:
+            return []
+            
+        data = res.json().get("data", {})
+        results = []
+        for ikey, quote in data.items():
+            sym = reverse_map.get(ikey, ikey)
+            results.append({
+                "symbol": sym,
+                "price": quote.get("last_price", 0),
+                "changePercent": quote.get("net_change", 0)
+            })
+            
+        return results
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return []
+    finally:
+        if conn: conn.close()
+
 # --- RESET ROUTE ---
 @app.get("/reset-signals")
 async def reset_signals():
