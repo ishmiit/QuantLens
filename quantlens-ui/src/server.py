@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import traceback
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel  # <--- ADD THIS
 from typing import Optional
@@ -864,9 +865,10 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             conn = psycopg2.connect(**DB_CONFIG)
             print("🔗 WS DB Session Opened")
-        except Exception as db_err:
-            print(f"❌ WS DB Connection Failed: {db_err}")
-            await websocket.send_text(json.dumps({"error": "Database connection failed"}))
+        except Exception as e:
+            print(f"🔴 EXPOSED WS DB ERROR: {str(e)}")
+            traceback.print_exc() 
+            await websocket.send_json({"error": "Database connection failed"})
             return
         
         # STEP 3: Enter the data loop
