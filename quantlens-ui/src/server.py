@@ -47,14 +47,21 @@ app.add_middleware(
 async def health_check():
     return {"status": "awake"}
 
-DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME", "quantlens"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "admin123"),
-    "host": os.getenv("DB_HOST", "127.0.0.1")
-}
+import sys
+
+# Strictly pull from the environment
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    print("🔴 FATAL: DATABASE_URL environment variable is not set in Render!")
+    sys.exit(1)
+
+# SQLAlchemy strictly requires 'postgresql://' not 'postgres://'
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 def get_db_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(DATABASE_URL)
 
 @app.on_event("startup")
 def startup_event():
