@@ -336,7 +336,24 @@ function App() {
       socket.onmessage = (event) => {
         if (!isMounted) return;
         try {
-          const liveData: Stock[] = JSON.parse(event.data);
+          // 1. Parse the incoming string into a JavaScript object
+          const rawData = JSON.parse(event.data);
+          console.log("🟢 Raw WS Data Received:", rawData); 
+
+          // 2. Find the array inside the payload
+          let dataArray = [];
+          if (Array.isArray(rawData)) {
+            dataArray = rawData; // The backend sent a pure array
+          } else if (rawData && Array.isArray(rawData.data)) {
+            dataArray = rawData.data; // The array is nested under 'data'
+          } else if (rawData && Array.isArray(rawData.ticks)) {
+            dataArray = rawData.ticks; // The array is nested under 'ticks'
+          } else {
+            console.warn("🟡 WS Data is not an array, skipping forEach:", rawData);
+            return; 
+          }
+
+          const liveData: Stock[] = dataArray;
           
           // ... (Inner message logic stays the same)
           liveData.forEach(item => {
