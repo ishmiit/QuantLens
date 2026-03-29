@@ -57,6 +57,11 @@ def get_db_connection():
 
 @app.on_event("startup")
 def startup_event():
+    print("🟢 ACTIVE ROUTES:")
+    for route in app.routes:
+        print(f" - {route.path} ({route.name})")
+    print("🟢 SERVER READY")
+    
     # --- PHASE 1: DATABASE SCHEMA ---
     conn = None
     try:
