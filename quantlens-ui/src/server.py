@@ -22,6 +22,12 @@ INSTRUMENT_MAP = {}
 KEY_TO_SYMBOL = {}  # The Rosetta Stone Mapper
 HISTORICAL_CACHE = TTLCache(maxsize=1000, ttl=60)
 
+# --- IN-MEMORY PASSTHROUGH STATE ---
+active_connections: set = set()   # Connected WebSocket clients
+in_memory_ticks: list = []         # Latest processed tick data, broadcast to all clients
+AVG_VOL_CACHE: dict = {}           # Avg 20d volume per symbol (loaded from ticker_master on startup)
+AI_FEATURE_CACHE: dict = {}        # RSI / volatility / SMA dist per symbol (from ticker_master)
+
 RAW_SYMBOLS = [
     "NSE_INDEX|Nifty%50", "BSE_INDEX|SENSEX", "NSE_INDEX|Nifty Bank",
     "NSE_EQ|HDFCBANK", "NSE_EQ|ICICIBANK", "NSE_EQ|AXISBANK", "NSE_EQ|SBIN", "NSE_EQ|KOTAKBANK", 
@@ -112,14 +118,13 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     print("🟢 ACTIVE ROUTES:")
     for route in app.routes:
         print(f" - {route.path} ({route.name})")
     print("🟢 SERVER READY")
-    
+
     # --- PHASE 1: DATABASE SCHEMA ---
-    import sys
     conn = None
     try:
         conn = get_db_connection()
@@ -138,14 +143,11 @@ def startup_event():
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # --- SCHEMA HARDENING: APEX PERSISTENCE ---
         cur.execute("ALTER TABLE ticker_live ADD COLUMN IF NOT EXISTS init_vol_rupees NUMERIC DEFAULT 0")
         cur.execute("ALTER TABLE ticker_live ADD COLUMN IF NOT EXISTS entry_time TIMESTAMP")
-        
         conn.commit()
         cur.close()
-        print("✅ DB Schema Verified & Hardened: init_vol_rupees and entry_time columns ensured.")
+        print("✅ DB Schema Verified & Hardened.")
     except psycopg2.Error as e:
         print(f"🔴 CRITICAL DB ERROR: {str(e)}")
     except Exception as e:
@@ -153,38 +155,12 @@ def startup_event():
     finally:
         if conn:
             conn.close()
-    
-    # --- PHASE 2: UPSTOX INSTRUMENTS (Non-blocking: failure here must NOT kill the server) ---
-    print("📡 Downloading Upstox Master Instrument List...")
-    try:
-        url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        content = zlib.decompress(response.content, zlib.MAX_WBITS | 16)
-        df = pd.read_csv(io.BytesIO(content))
-        
-        global INSTRUMENT_MAP, KEY_TO_SYMBOL
-        for _, row in df.iterrows():
-            t_symbol = str(row['tradingsymbol']).strip().upper()
-            i_key = str(row['instrument_key']).strip()
-            INSTRUMENT_MAP[t_symbol] = i_key
-            KEY_TO_SYMBOL[i_key] = t_symbol
-            if "-EQ" in t_symbol:
-                clean_sym = t_symbol.replace("-EQ", "")
-                INSTRUMENT_MAP[clean_sym] = i_key
-                # LTM / LTIM Corporate Action Rosetta Stone logic
-                if clean_sym == "LTM":
-                    INSTRUMENT_MAP["LTIM"] = i_key
-        print(f"✅ Loaded {len(INSTRUMENT_MAP)} instrument keys and reverse mapping.")
-    except requests.exceptions.Timeout:
-        print("⚠️ Upstox CSV download timed out after 15s. Server will continue without instrument map.")
-    except Exception as e:
-        import traceback
-        print(f"❌ Failed to load Upstox instruments (non-fatal): {e}")
-        traceback.print_exc()
-    
-    print("🚀 Startup complete. Server is ready to accept connections.")
+
+    # --- PHASE 2: LAUNCH IN-MEMORY LIVE FEED (replaces CSV download) ---
+    # Historical data is now pre-seeded by sync_history.py via GitHub Actions CRON.
+    # We only need to load mappings from DB and kick off the live feed task.
+    print("🚀 Startup complete. Launching in-memory live feed background task...")
+    asyncio.create_task(upstox_live_feed())
 
 class ForgeTrade(BaseModel):
     symbol: str
@@ -946,106 +922,222 @@ async def delete_individual_trade(symbol: str):
     finally:
         if conn: conn.close()
         
+# ============================================================
+# IN-MEMORY LIVE FEED BACKGROUND TASK
+# Fetches live quotes from Upstox, applies conviction logic,
+# and broadcasts directly to all connected WebSocket clients.
+# Historical baseline data is read from ticker_master (pre-seeded
+# by sync_history.py via the GitHub Actions CRON job).
+# ============================================================
+async def upstox_live_feed():
+    """Background task: poll Upstox REST quotes and broadcast in-memory to all WebSocket clients."""
+    import upstox_client
+
+    global in_memory_ticks, AVG_VOL_CACHE, AI_FEATURE_CACHE, active_connections
+
+    print("🚀 [LiveFeed] Starting in-memory Upstox live feed...")
+
+    # --- Step 1: Load token from Neon DB ---
+    try:
+        conn_init = get_db_connection()
+        cur = conn_init.cursor()
+        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
+        row = cur.fetchone()
+        if not row:
+            print("🔴 [LiveFeed] UPSTOX_TOKEN missing from system_config. Aborting feed.")
+            cur.close()
+            conn_init.close()
+            return
+        access_token = row[0]
+
+        # --- Step 2: Pre-load avg volume & AI feature caches from ticker_master ---
+        print("📊 [LiveFeed] Loading avg-volume & AI feature caches from ticker_master...")
+        cur.execute("SELECT symbol, avg_vol_20d, rsi, volatility, dist_sma20, cluster_id FROM ticker_master")
+        for r in cur.fetchall():
+            sym = r[0]
+            AVG_VOL_CACHE[sym] = float(r[1]) if r[1] else 1.0
+            AI_FEATURE_CACHE[sym] = {
+                'rsi':         float(r[2]) if r[2] is not None else 50.0,
+                'volatility':  float(r[3]) if r[3] is not None else 0.015,
+                'dist_sma_20': float(r[4]) if r[4] is not None else 0.0,
+                'cluster_id':  int(r[5])   if r[5] is not None else 0,
+            }
+        cur.close()
+        conn_init.close()
+        print(f"✅ [LiveFeed] Caches loaded: {len(AVG_VOL_CACHE)} symbols.")
+    except Exception as e:
+        print(f"❌ [LiveFeed] Initialization error: {e}")
+        return
+
+    # --- Step 3: Build Upstox API client ---
+    configuration = upstox_client.Configuration()
+    configuration.access_token = access_token
+    api_client = upstox_client.ApiClient(configuration)
+    market_api = upstox_client.MarketQuoteApi(api_client)
+
+    # --- Step 4: Resolve valid instrument keys from watchlist ---
+    valid_keys = []
+    for raw_sym in RAW_SYMBOLS:
+        clean_name = raw_sym.split("|")[-1].replace('%50', ' 50').replace('%20', ' ').strip().upper()
+        key = get_instrument_key(clean_name)
+        if key:
+            valid_keys.append(key)
+    print(f"🎯 [LiveFeed] Resolved {len(valid_keys)} instrument keys. Starting fetch loop.")
+
+    BATCH_SIZE = 50
+    SLEEP_BETWEEN_BATCHES = 0.5   # seconds — respects Upstox rate limits
+    SLEEP_BETWEEN_CYCLES  = 1.0   # seconds — full-cycle cadence
+
+    # --- Step 5: Continuous fetch → process → broadcast loop ---
+    while True:
+        try:
+            from datetime import datetime
+            now = datetime.now()
+            market_open  = now.replace(hour=9, minute=15, second=0, microsecond=0)
+            mins_elapsed = max(1.0, (now - market_open).total_seconds() / 60.0)
+            day_fraction = min(1.0, mins_elapsed / 375.0) if now > market_open else 0.01
+            day_of_week  = now.weekday()
+            time_float   = now.hour + now.minute / 60.0
+
+            all_processed = []
+            conn_hist = get_db_connection()
+
+            for i in range(0, len(valid_keys), BATCH_SIZE):
+                chunk = valid_keys[i : i + BATCH_SIZE]
+                instruments_string = ",".join(c.replace("&", "%26") for c in chunk)
+
+                try:
+                    api_response = await asyncio.to_thread(
+                        market_api.get_full_market_quote, instruments_string, '2.0'
+                    )
+                    if not api_response or not api_response.data:
+                        continue
+
+                    for ikey, details in api_response.data.items():
+                        # Resolve human symbol from KEY_TO_SYMBOL Rosetta Stone
+                        t_sym = getattr(details, 'trading_symbol', None)
+                        raw_sym = str(t_sym).strip().upper() if t_sym else ikey
+                        db_symbol = KEY_TO_SYMBOL.get(ikey, raw_sym).replace("-EQ", "")
+
+                        price      = float(getattr(details, 'last_price', 0.0) or 0.0)
+                        prev_close = float(getattr(details, 'last_close', 0.0) or 0.0)
+                        open_price = 0.0
+                        if hasattr(details, 'ohlc') and details.ohlc:
+                            open_price = float(getattr(details.ohlc, 'open', 0.0) or 0.0)
+
+                        change_pct = 0.0
+                        if open_price > 0:
+                            change_pct = (price - open_price) / open_price * 100
+                        elif prev_close > 0:
+                            change_pct = (price - prev_close) / prev_close * 100
+
+                        current_vol = float(getattr(details, 'volume', 0.0) or 0.0)
+                        avg_vol     = AVG_VOL_CACHE.get(db_symbol, 1.0)
+                        rvol        = current_vol / (avg_vol * day_fraction) if (avg_vol * day_fraction) > 0 else 1.0
+
+                        features = AI_FEATURE_CACHE.get(db_symbol, {
+                            'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0
+                        })
+
+                        stock_dict = {
+                            "symbol":      db_symbol,
+                            "price":       round(price, 2),
+                            "open_price":  round(open_price, 2),
+                            "prev_close":  round(prev_close, 2),
+                            "pct_change":  round(change_pct, 2),
+                            "live_pct":    round(change_pct, 2),
+                            "volume":      current_vol,
+                            "rvol":        round(rvol, 2),
+                            "rsi":         features['rsi'],
+                            "volatility":  features['volatility'],
+                            "dist_sma20":  features['dist_sma_20'],
+                            "cluster_id":  features['cluster_id'],
+                            "atr":         features.get('atr', price * 0.015),
+                        }
+
+                        processed = apply_conviction_logic(stock_dict, conn=conn_hist)
+                        all_processed.append(processed)
+
+                except upstox_client.rest.ApiException as api_e:
+                    if api_e.status == 401:
+                        print("🚫 [LiveFeed] 401 Unauthorized — token expired. Feed pausing 60s.")
+                        await asyncio.sleep(60)
+                    else:
+                        print(f"⚠️ [LiveFeed] API error on batch {i}: {api_e.status}")
+                except Exception as batch_e:
+                    print(f"⚠️ [LiveFeed] Batch error: {batch_e}")
+
+                await asyncio.sleep(SLEEP_BETWEEN_BATCHES)
+
+            conn_hist.close()
+
+            # Sort: Indices first, equities by symbol
+            def _sort_key(s):
+                sym = s.get('symbol', '')
+                if sym == 'NIFTY_50':   return (0, sym)
+                if sym == 'SENSEX':     return (1, sym)
+                if sym == 'NIFTY_BANK': return (2, sym)
+                return (3, sym)
+
+            all_processed.sort(key=_sort_key)
+            in_memory_ticks = all_processed  # atomic assignment
+
+            # Broadcast to every connected WebSocket client
+            payload = json.dumps(in_memory_ticks, cls=DecimalEncoder)
+            dead = set()
+            for ws in active_connections:
+                try:
+                    await ws.send_text(payload)
+                except Exception:
+                    dead.add(ws)
+            active_connections.difference_update(dead)
+
+            if all_processed:
+                buys = [s['symbol'] for s in all_processed if s.get('signal') == 'BUY' and s.get('isConviction')]
+                log = f"🔄 [LiveFeed] {now.strftime('%H:%M:%S')} | {len(all_processed)} symbols"
+                if buys:
+                    log += f" | 🔥 CONVICTIONS: {', '.join(buys)}"
+                print(log)
+
+        except Exception as cycle_e:
+            print(f"❌ [LiveFeed] Cycle error: {cycle_e}")
+            await asyncio.sleep(5)
+            continue
+
+        await asyncio.sleep(SLEEP_BETWEEN_CYCLES)
+
+
+# ============================================================
+# WEBSOCKET ENDPOINT — Push-based, no DB polling
+# Clients connect here and receive broadcasts from upstox_live_feed.
+# ============================================================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    global active_connections, in_memory_ticks
     await websocket.accept()
-    print("🟢 WebSocket Connection Accepted")
-    
-    conn = None
+    active_connections.add(websocket)
+    print(f"🟢 WebSocket Connected. Active clients: {len(active_connections)}")
+
     try:
-        # STEP 2: Open DB connection AFTER the handshake is established
-        try:
-            conn = psycopg2.connect(**DB_CONFIG)
-            print("🔗 WS DB Session Opened")
-        except Exception as e:
-            print(f"🔴 EXPOSED WS DB ERROR: {str(e)}")
-            traceback.print_exc() 
-            await websocket.send_json({"error": "Database connection failed"})
-            return
-        
-        # STEP 3: Enter the data loop
+        # Immediately send the latest snapshot so the client doesn't wait for the next cycle
+        if in_memory_ticks:
+            await websocket.send_text(json.dumps(in_memory_ticks, cls=DecimalEncoder))
+
+        # Keep connection alive; data is pushed by upstox_live_feed()
         while True:
+            # Receive any client messages (e.g., pings) to keep the socket healthy
             try:
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
-                try:
-                    cursor.execute("""
-                        SELECT 
-                            l.symbol, l.price, l.rvol, l.pct_change as live_pct,
-                            l.stop_loss, l.target_price, l.confidence, l.ai_mode, l.ai_signal,
-                            m.prev_close, m.rsi, m.dist_sma20, m.atr, m.dist_52wh, m.sector
-                        FROM ticker_live l
-                        LEFT JOIN ticker_master m ON l.symbol = m.symbol
-                        ORDER BY 
-                            CASE 
-                                WHEN l.symbol = 'NIFTY_50' THEN 0
-                                WHEN l.symbol = 'SENSEX' THEN 1
-                                WHEN l.symbol = 'NIFTY_BANK' THEN 2
-                                ELSE 3
-                            END
-                        LIMIT 250
-                    """)
-                    raw_stocks = cursor.fetchall()
-                    
-                    # --- PORTFOLIO CAPACITY CALCULATION ---
-                    cursor.execute("SELECT COUNT(*) as open_count FROM active_trades WHERE status = 'OPEN'")
-                    cap_row = cursor.fetchone()
-                    open_count = cap_row['open_count'] if cap_row else 0
-                finally:
-                    cursor.close()
-                
-                total_equity = INITIAL_CAPITAL
-                max_positions = int(total_equity / FIXED_TRADE_ALLOCATION)
-                capacity_full = (open_count >= max_positions)
-                
-                if raw_stocks:
-                    processed_stocks = []
-                    for stock_row in raw_stocks:
-                        stock_dict = dict(stock_row)
-                        
-                        raw_db_key = stock_dict.get('symbol')
-                        mapped_symbol = KEY_TO_SYMBOL.get(raw_db_key, raw_db_key)
-                        stock_dict['symbol'] = mapped_symbol
-                        
-                        processed_stock = apply_conviction_logic(stock_dict, conn=conn)
-                        
-                        if processed_stock.get('isConviction') and capacity_full:
-                            processed_stock['isConviction'] = False
-                            processed_stock['ai_mode'] = f"{processed_stock['ai_mode']} (SKIPPED: FULL)"
-                            processed_stock['capacity_full'] = True
-                        else:
-                            processed_stock['capacity_full'] = capacity_full
+                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                pass  # expected — no client message needed
 
-                        processed_stocks.append(processed_stock)
-
-                    try:
-                        await websocket.send_text(json.dumps(processed_stocks, cls=DecimalEncoder))
-                    except (WebSocketDisconnect, RuntimeError):
-                        print("ℹ️ Client disconnected during send. Ending loop.")
-                        break
-                
-                await asyncio.sleep(1) 
-
-            except (WebSocketDisconnect, RuntimeError):
-                print("ℹ️ Client disconnected. Ending loop.")
-                break
-            except Exception as loop_err:
-                import traceback
-                print(f"❌ Internal Loop Error: {loop_err}")
-                traceback.print_exc()
-                if conn.closed:
-                    print("💀 DB Connection lost during loop. Breaking.")
-                    break
-                await asyncio.sleep(2)
-            
     except WebSocketDisconnect:
-        print("ℹ️ WebSocket Connection Closed by Client.")
+        pass
     except Exception as e:
         print(f"🔴 WebSocket Error: {e}")
     finally:
-        print("🔌 WebSocket Closed")
-        if conn and not conn.closed:
-            conn.close()
-            print("🔌 DB Connection Closed for WebSocket session")
+        active_connections.discard(websocket)
+        print(f"🔌 WebSocket Closed. Active clients: {len(active_connections)}")
 
 if __name__ == "__main__":
     import os
