@@ -1018,33 +1018,50 @@ async def upstox_live_feed():
     api_client = upstox_client.ApiClient(configuration)
     market_api = upstox_client.MarketQuoteApi(api_client)
 
-    # --- Step 5: Resolve instrument keys for the full watchlist ---
-    # RAW_SYMBOLS entries look like "NSE_EQ|HDFCBANK" or "NSE_INDEX|Nifty%50".
-    # We extract the right-hand side and normalise it to match INSTRUMENT_MAP keys.
+    # --- Step 5: Resolve instrument keys — multi-segment aware ---
+    # RAW_SYMBOLS look like "NSE_EQ|HDFCBANK", "NSE_INDEX|Nifty%50", "BSE_INDEX|SENSEX".
+    # We need to look up by the FULL instrument_key format used by Upstox: segment|tradingsymbol
+    #   NSE_EQ   → key is stored exactly as  "NSE_EQ|HDFCBANK-EQ"  in CSV
+    #   NSE_INDEX → key is "NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank"
+    #   BSE_INDEX → key is "BSE_INDEX|SENSEX"
     valid_keys       = []
     unmapped_symbols = []
+    seen_keys        = set()   # deduplication guard
 
     for raw_sym in RAW_SYMBOLS:
-        right_side = raw_sym.split('|')[-1]   # e.g. "HDFCBANK", "Nifty%50", "SENSEX"
-        # Normalise URL-encoded index names
-        clean_name = (
-            right_side
-            .replace('%50', ' 50')
-            .replace('%20', ' ')
-            .strip()
-            .upper()
-        )
-        # Translate to our canonical index names used as INSTRUMENT_MAP aliases
-        if 'NIFTY' in clean_name and '50' in clean_name:
-            clean_name = 'NIFTY_50'
-        elif 'BANK' in clean_name and 'NIFTY' in clean_name:
-            clean_name = 'NIFTY_BANK'
+        segment, right_side = raw_sym.split('|', 1)    # e.g. "NSE_EQ", "HDFCBANK"
+        # Decode URL-encoded index names
+        right_side = right_side.replace('%50', ' 50').replace('%20', ' ').strip()
 
-        key = INSTRUMENT_MAP.get(clean_name)
-        if key:
+        key = None
+
+        if segment == 'NSE_EQ':
+            # Upstox NSE equity keys end in "-EQ"  e.g. "NSE_EQ|HDFCBANK-EQ"
+            # INSTRUMENT_MAP has both "HDFCBANK" and "HDFCBANK-EQ" entries (we build both)
+            key = INSTRUMENT_MAP.get(right_side.upper())
+        elif segment == 'NSE_INDEX':
+            # Normalise: "Nifty 50" → "NSE_INDEX|Nifty 50"
+            key = f"NSE_INDEX|{right_side}"    # literal key used by Upstox API
+        elif segment == 'BSE_INDEX':
+            key = f"BSE_INDEX|{right_side}"    # e.g. "BSE_INDEX|SENSEX"
+
+        if key and key not in seen_keys:
             valid_keys.append(key)
+            seen_keys.add(key)
         else:
-            unmapped_symbols.append(clean_name)
+            unmapped_symbols.append(f"{segment}|{right_side}")
+
+    # Hardcode the three benchmark indices as guaranteed fallbacks so they
+    # are ALWAYS in the feed even if the dynamic lookup produces nothing.
+    GUARANTEED_INDICES = [
+        "NSE_INDEX|Nifty 50",
+        "NSE_INDEX|Nifty Bank",
+        "BSE_INDEX|SENSEX",
+    ]
+    for idx_key in GUARANTEED_INDICES:
+        if idx_key not in seen_keys:
+            valid_keys.insert(0, idx_key)
+            seen_keys.add(idx_key)
 
     print(f"🎯 [LiveFeed] Successfully resolved {len(valid_keys)} instrument keys.")
     if unmapped_symbols:
@@ -1099,8 +1116,14 @@ async def upstox_live_feed():
                             change_pct = (price - prev_close) / prev_close * 100
 
                         current_vol = float(getattr(details, 'volume', 0.0) or 0.0)
-                        avg_vol     = AVG_VOL_CACHE.get(db_symbol, 1.0)
-                        rvol        = current_vol / (avg_vol * day_fraction) if (avg_vol * day_fraction) > 0 else 1.0
+                        avg_vol     = AVG_VOL_CACHE.get(db_symbol, 0.0)
+                        # RVOL sanity guard: default 1.0 if avg_vol is zero/missing;
+                        # cap at 100x to prevent UI overflow from partial-day data.
+                        if avg_vol and avg_vol > 0 and day_fraction > 0:
+                            raw_rvol = current_vol / (avg_vol * day_fraction)
+                            rvol     = round(min(raw_rvol, 100.0), 2)
+                        else:
+                            rvol = 1.0   # neutral default when no baseline exists
 
                         features = AI_FEATURE_CACHE.get(db_symbol, {
                             'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0

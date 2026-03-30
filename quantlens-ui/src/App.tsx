@@ -601,19 +601,23 @@ function App() {
           })}
         </div>
 
-        {/* MOBILE INDICES STRIP */}
-        <div className="flex md:hidden flex-row justify-between w-full px-2 py-2 bg-black/40 backdrop-blur-md border-b border-gray-800 shrink-0">
+        {/* MOBILE INDICES STRIP — single-line, tighter labels */}
+        <div className="flex md:hidden flex-row items-center justify-between w-full px-3 py-1.5 bg-black border-b border-zinc-900 shrink-0 gap-2">
           {[
-            { label: 'NIFTY', key: 'NIFTY_50' },
-            { label: 'SENSEX', key: 'SENSEX' },
-            { label: 'BANK', key: 'NIFTY_BANK' },
+            { label: 'NF50',  key: 'NIFTY_50' },
+            { label: 'SNX',   key: 'SENSEX' },
+            { label: 'BNF',   key: 'NIFTY_BANK' },
           ].map((idx) => {
             const data = getIndexData(idx.key);
+            const pct  = data?.change_percent ?? 0;
             return (
-              <div key={idx.label} className="flex flex-row items-baseline gap-2">
-                <span className="text-[10px] text-gray-400 uppercase">{idx.label}</span>
-                <span className="text-xs font-mono font-bold text-white">
-                  {data ? data.price?.toLocaleString('en-IN') : '---'}
+              <div key={idx.label} className="flex items-baseline gap-1.5 min-w-0">
+                <span className="text-[9px] text-zinc-500 font-black uppercase tracking-tight shrink-0">{idx.label}</span>
+                <span className="text-[11px] font-mono font-bold text-white tabular-nums truncate">
+                  {data ? data.price?.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '---'}
+                </span>
+                <span className={`text-[9px] font-bold shrink-0 ${pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                 </span>
               </div>
             );
@@ -676,18 +680,17 @@ function App() {
                       }}
                       className="flex items-center px-10 border-b border-white/[0.03] hover:bg-gradient-to-r hover:from-accent-green/5 hover:to-transparent transition-all duration-200 group"
                     >
-                      <div className="w-1/4 flex items-center gap-4">
-                        <div className={`w-1.5 h-6 rounded-full transition-all duration-300 ${(s.change_percent ?? 0) >= 0
-                          ? 'bg-accent-green shadow-[0_0_12px_#39ff14] group-hover:shadow-[0_0_16px_#39ff14]'
-                          : 'bg-accent-red shadow-[0_0_12px_#ff3131] group-hover:shadow-[0_0_16px_#ff3131]'
+                      <div className="w-1/4 flex items-center gap-3">
+                        <div className={`w-1 h-5 rounded-full transition-all duration-300 shrink-0 ${(s.change_percent ?? 0) >= 0
+                          ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
+                          : 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'
                           }`} />
-                        <span className="font-black text-white text-sm tracking-tight group-hover:text-accent-green transition-colors">
+                        <span className="font-black text-white text-[11px] tracking-tight group-hover:text-accent-green transition-colors truncate">
                           {cleanSymbol(s.symbol)}
                         </span>
-                        {/* NEW BUTTON */}
                         <button
                           onClick={(e) => { e.stopPropagation(); handleSendToForge(s); }}
-                          className="opacity-0 group-hover:opacity-100 px-2 py-0.5 border border-accent-green/50 text-accent-green text-[8px] rounded hover:bg-accent-green hover:text-black transition-all"
+                          className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 border border-accent-green/50 text-accent-green text-[7px] rounded hover:bg-accent-green hover:text-black transition-all shrink-0"
                         >
                           FORGE
                         </button>
@@ -696,25 +699,25 @@ function App() {
                         <PriceDisplay
                           price={s.price ?? 0}
                           prefix="₹"
-                          className="text-sm font-bold tabular-nums text-slate-100"
+                          className="text-[11px] font-bold tabular-nums text-slate-100"
                         />
                       </div>
                       <div className="w-1/4 text-right">
-                        <span className={`inline-block px-3 py-1 rounded text-[11px] font-black transition-all ${(s.change_percent ?? 0) >= 0
-                          ? 'text-accent-green bg-accent-green/10 group-hover:bg-accent-green/20'
-                          : 'text-accent-red bg-accent-red/10 group-hover:bg-accent-red/20'
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black transition-all ${(s.change_percent ?? 0) >= 0
+                          ? 'text-emerald-400 bg-emerald-400/10'
+                          : 'text-red-400 bg-red-400/10'
                           }`}>
                           {(s.change_percent ?? 0) >= 0 ? '+' : ''}{(s.change_percent ?? 0).toFixed(2)}%
                         </span>
                       </div>
-                      <div className="w-1/4 flex items-center justify-end gap-3 pr-6">
-                        <div className="w-20 h-1.5 bg-zinc-800/50 rounded-full overflow-hidden border border-accent-green/10">
+                      <div className="w-1/4 flex items-center justify-end gap-2 pr-4">
+                        <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-accent-green/60 to-accent-green transition-all duration-300"
+                            className="h-full bg-accent-green/70 transition-all duration-300"
                             style={{ width: `${Math.min(((s.rvol ?? 0) / 5) * 100, 100)}%` }}
                           />
                         </div>
-                        <span className="text-[11px] font-bold text-zinc-500 w-8 tabular-nums">{(s.rvol ?? 0).toFixed(1)}</span>
+                        <span className="text-[10px] font-bold text-zinc-500 w-7 tabular-nums text-right">{(s.rvol ?? 0).toFixed(1)}</span>
                       </div>
                     </div>
                   );
@@ -1072,25 +1075,26 @@ function App() {
                   );
                 })()}
 
-                {/* HIGH-DENSITY DATA STRIP (Secondary Metrics) */}
-                <div className="grid grid-cols-2 gap-3 mt-4 flex-1 overflow-y-auto custom-scrollbar">
+                {/* HIGH-DENSITY DATA STRIP (Secondary Metrics) — 3-col grid */}
+                <div className="grid grid-cols-3 gap-2 mt-3 flex-1 overflow-y-auto custom-scrollbar">
                   {[
-                    { label: 'Momentum (RSI)', val: forgeMetrics?.rsi?.toFixed(1) || '0.0', desc: (forgeMetrics?.rsi > 60 ? 'Strong' : 'Neutral'), hl: forgeMetrics?.rsi > 60 },
-                    { label: 'Rel Volume', val: forgeMetrics?.rvol?.toFixed(2) || '0.00', desc: 'Flow Divergence', hl: forgeMetrics?.rvol > 1.5 },
-                    { label: 'Distance SMA20', val: `${forgeMetrics?.dist_sma20?.toFixed(2) || '0.0'}%`, desc: 'Mean Reversion', hl: false },
-                    { label: 'Volatility (ATR)', val: forgeMetrics?.atr?.toFixed(2) || '0.0', desc: 'Daily Range', hl: false },
-                    { label: '52W High Dist', val: `${forgeMetrics?.dist_52wh?.toFixed(2) || '0.0'}%`, desc: 'Breakout Prox', hl: forgeMetrics?.dist_52wh > -5 },
-                    { label: 'Day Perf', val: `${forgeMetrics?.pct_change?.toFixed(2) || '0.0'}%`, desc: 'Intraday Trend', hl: forgeMetrics?.pct_change > 0 },
-                    { label: 'Sector Group', val: forgeMetrics?.sector || 'N/A', desc: 'Beta Category', hl: false },
-                    { label: 'Signal Str', val: forgeMetrics?.signal_strength || 'N/A', desc: 'Alpha Factor', hl: false },
+                    { label: 'RSI', val: forgeMetrics?.rsi?.toFixed(1) || '0.0', desc: (forgeMetrics?.rsi > 60 ? 'Strong' : 'Neutral'), hl: forgeMetrics?.rsi > 60 },
+                    { label: 'Rel Vol', val: forgeMetrics?.rvol?.toFixed(2) || '0.00', desc: 'Flow Div', hl: forgeMetrics?.rvol > 1.5 },
+                    { label: 'SMA20 Dist', val: `${forgeMetrics?.dist_sma20?.toFixed(2) || '0.0'}%`, desc: 'Mean Rev', hl: false },
+                    { label: 'ATR', val: forgeMetrics?.atr?.toFixed(2) || '0.0', desc: 'Daily Rng', hl: false },
+                    { label: '52W Dist', val: `${forgeMetrics?.dist_52wh?.toFixed(2) || '0.0'}%`, desc: 'Breakout', hl: forgeMetrics?.dist_52wh > -5 },
+                    { label: 'Day Perf', val: `${forgeMetrics?.pct_change?.toFixed(2) || '0.0'}%`, desc: 'Intraday', hl: forgeMetrics?.pct_change > 0 },
+                    { label: 'Sector', val: forgeMetrics?.sector || 'N/A', desc: 'Beta Cat', hl: false },
+                    { label: 'Sig Str', val: forgeMetrics?.signal_strength || 'N/A', desc: 'Alpha', hl: false },
+                    { label: 'Signal', val: forgeMetrics?.signal || '---', desc: 'Direction', hl: forgeMetrics?.signal === 'BUY' },
                   ].map((box, i) => (
-                    <div key={i} className="bg-gray-900 border border-gray-800 p-3 rounded-md overflow-hidden flex flex-col justify-between">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 truncate">{box.label}</span>
+                    <div key={i} className="bg-zinc-950 border border-zinc-800 p-2 rounded overflow-hidden flex flex-col justify-between min-h-[52px]">
+                      <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mb-0.5 truncate">{box.label}</span>
                       <div>
-                        <span className={`text-sm font-mono block truncate ${isAuditing ? 'text-gray-700 animate-pulse' : (box.hl ? 'text-white' : 'text-gray-300')}`}>
+                        <span className={`text-[11px] font-mono font-bold block truncate ${isAuditing ? 'text-zinc-700 animate-pulse' : (box.hl ? 'text-accent-green' : 'text-zinc-300')}`}>
                           {isAuditing ? '---' : box.val}
                         </span>
-                        <span className="text-[10px] text-gray-600 uppercase tracking-widest block truncate">{isAuditing ? 'SCANNING' : box.desc}</span>
+                        <span className="text-[8px] text-zinc-700 uppercase tracking-widest block truncate">{isAuditing ? 'SCANNING' : box.desc}</span>
                       </div>
                     </div>
                   ))}
@@ -1098,10 +1102,11 @@ function App() {
               </div>
 
               {/* RIGHT COLUMN: INSTITUTIONAL ORDER TICKET */}
-              <div className="w-80 lg:w-96 flex flex-col bg-zinc-950 border border-zinc-800 shrink-0">
-                <div className="p-3 border-b border-zinc-800 bg-zinc-900 flex justify-between items-center">
-                  <span className="text-[10px] text-zinc-400 font-bold tracking-[0.2em] uppercase">Order Execution Ticket</span>
-                  <span className="text-[10px] text-accent-green font-mono">LIVE / Direct API</span>
+              <div className="w-72 lg:w-80 flex flex-col bg-black border border-zinc-800 shrink-0">
+                {/* Ticket Header */}
+                <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-950 flex justify-between items-center">
+                  <span className="text-[10px] text-zinc-400 font-black tracking-[0.2em] uppercase">Execution Ticket</span>
+                  <span className="text-[9px] text-accent-green font-mono border border-accent-green/30 px-1.5 py-0.5">LIVE</span>
                 </div>
 
                 <div className="p-5 flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
@@ -1111,18 +1116,18 @@ function App() {
                       <span className="text-3xl font-black text-white tracking-tight">{forgeSearch || '---'}</span>
                       <span className="text-[10px] text-zinc-500 block uppercase tracking-widest mt-1">Spot Equities</span>
                     </div>
-                    <div className="text-right flex flex-col items-end gap-2">
-                      <span className="text-xl font-mono text-zinc-300">₹{(forgeMetrics as any)?.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '---'}</span>
-                      <div className="flex bg-black border border-zinc-800 p-0.5 rounded-sm">
-                        <button 
+                    <div className="text-right flex flex-col items-end gap-1.5">
+                      <span className="text-lg font-mono font-bold text-zinc-200">₹{(forgeMetrics as any)?.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '---'}</span>
+                      <div className="flex bg-black border border-zinc-700 p-0.5">
+                        <button
                           onClick={() => setForgeSignal('BUY')}
-                          className={`px-3 py-1 text-[9px] font-black tracking-tighter transition-all ${forgeSignal === 'BUY' ? 'bg-accent-green text-black' : 'text-zinc-600 hover:text-zinc-400'}`}
+                          className={`px-4 py-1 text-[9px] font-black tracking-widest uppercase transition-all ${forgeSignal === 'BUY' ? 'bg-accent-green text-black' : 'text-zinc-600 hover:text-zinc-300'}`}
                         >
                           BUY
                         </button>
-                        <button 
+                        <button
                           onClick={() => setForgeSignal('SELL')}
-                          className={`px-3 py-1 text-[9px] font-black tracking-tighter transition-all ${forgeSignal === 'SELL' ? 'bg-accent-red text-black' : 'text-zinc-600 hover:text-zinc-400'}`}
+                          className={`px-4 py-1 text-[9px] font-black tracking-widest uppercase transition-all ${forgeSignal === 'SELL' ? 'bg-accent-red text-black' : 'text-zinc-600 hover:text-zinc-300'}`}
                         >
                           SELL
                         </button>
@@ -1207,24 +1212,25 @@ function App() {
                 </div>
 
                 {/* ACTION BUTTONS */}
-                <div className="p-4 bg-black border-t border-gray-800 flex flex-col gap-3">
+                <div className="p-3 bg-black border-t border-zinc-800 flex flex-col gap-2">
                   <button
                     onClick={executeLiveTrade}
                     disabled={!forgeMetrics || isAuditing}
-                    className={`w-full py-3 rounded-md text-sm font-semibold uppercase tracking-wider transition-all ${!forgeMetrics || isAuditing
-                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                      : (forgeSignal === 'BUY'
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'bg-red-600 text-white hover:bg-red-700')
-                      }`}
+                    className={`w-full py-2.5 text-[11px] font-black uppercase tracking-widest transition-all border ${
+                      !forgeMetrics || isAuditing
+                        ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                        : forgeSignal === 'BUY'
+                          ? 'bg-accent-green border-accent-green text-black hover:bg-accent-green/90'
+                          : 'bg-accent-red border-accent-red text-black hover:bg-accent-red/90'
+                    }`}
                   >
-                    {isAuditing ? "ANALYZING..." : `${forgeSignal} (${forgeMetrics?.probability || 0}%)`}
+                    {isAuditing ? 'ANALYZING...' : `${forgeSignal}  ${forgeMetrics?.probability || 0}%`}
                   </button>
                   <button
                     onClick={handleVirtualForge}
-                    className="w-full bg-transparent border border-gray-600 text-gray-300 py-3 rounded-md text-sm font-semibold uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                    className="w-full bg-transparent border border-zinc-700 text-zinc-400 py-2.5 text-[11px] font-black uppercase tracking-widest hover:border-zinc-500 hover:text-zinc-200 transition-colors"
                   >
-                    VIRTUAL FORGE
+                    VIRTUAL PAPER TRADE
                   </button>
                 </div>
               </div>
