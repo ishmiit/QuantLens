@@ -156,9 +156,9 @@ async def startup_event():
         if conn:
             conn.close()
 
-    # --- PHASE 2: LAUNCH IN-MEMORY LIVE FEED (replaces CSV download) ---
-    # Historical data is now pre-seeded by sync_history.py via GitHub Actions CRON.
-    # We only need to load mappings from DB and kick off the live feed task.
+    # --- PHASE 2: LAUNCH IN-MEMORY LIVE FEED ---
+    # The feed task itself will download the instrument CSV on first boot.
+    # Historical baseline is pre-seeded by sync_history.py via GitHub Actions CRON.
     print("🚀 Startup complete. Launching in-memory live feed background task...")
     asyncio.create_task(upstox_live_feed())
 
@@ -969,20 +969,87 @@ async def upstox_live_feed():
         print(f"❌ [LiveFeed] Initialization error: {e}")
         return
 
-    # --- Step 3: Build Upstox API client ---
+    # --- Step 3: Download & parse the Upstox master instrument list ---
+    # This populates the global INSTRUMENT_MAP (symbol → key) and
+    # KEY_TO_SYMBOL (key → clean symbol) used by the rest of the server.
+    print("📡 [LiveFeed] Downloading Upstox master instrument list...")
+    try:
+        csv_url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
+        csv_response = await asyncio.to_thread(
+            requests.get, csv_url,
+            **{"headers": {'User-Agent': 'Mozilla/5.0'}, "timeout": 30}
+        )
+        csv_response.raise_for_status()
+        csv_content = zlib.decompress(csv_response.content, zlib.MAX_WBITS | 16)
+        master_df = pd.read_csv(io.BytesIO(csv_content))
+
+        for _, row in master_df.iterrows():
+            t_symbol = str(row['tradingsymbol']).strip().upper()
+            i_key    = str(row['instrument_key']).strip()
+            INSTRUMENT_MAP[t_symbol] = i_key
+            KEY_TO_SYMBOL[i_key]     = t_symbol
+            if '-EQ' in t_symbol:
+                clean_sym = t_symbol.replace('-EQ', '')
+                INSTRUMENT_MAP[clean_sym] = i_key
+                if clean_sym == 'LTM':
+                    INSTRUMENT_MAP['LTIM'] = i_key   # corporate action alias
+
+        # Index aliases (Upstox uses space-formatted names in the CSV)
+        for alias, canonical in [
+            ('NIFTY 50',  'NIFTY_50'),
+            ('NIFTY50',   'NIFTY_50'),
+            ('NIFTY BANK','NIFTY_BANK'),
+            ('NIFTYBANK', 'NIFTY_BANK'),
+            ('SENSEX',    'SENSEX'),
+        ]:
+            if alias in INSTRUMENT_MAP:
+                INSTRUMENT_MAP[canonical] = INSTRUMENT_MAP[alias]
+
+        print(f"✅ [LiveFeed] Instrument map built: {len(INSTRUMENT_MAP)} entries, "
+              f"{len(KEY_TO_SYMBOL)} reverse entries.")
+    except Exception as csv_e:
+        print(f"❌ [LiveFeed] Failed to download instrument CSV: {csv_e}. "
+              "Key resolution will be limited — retrying on next server restart.")
+        # Do NOT return here; the feed can still serve the frontier with partial data.
+
+    # --- Step 4: Build Upstox API client ---
     configuration = upstox_client.Configuration()
     configuration.access_token = access_token
     api_client = upstox_client.ApiClient(configuration)
     market_api = upstox_client.MarketQuoteApi(api_client)
 
-    # --- Step 4: Resolve valid instrument keys from watchlist ---
-    valid_keys = []
+    # --- Step 5: Resolve instrument keys for the full watchlist ---
+    # RAW_SYMBOLS entries look like "NSE_EQ|HDFCBANK" or "NSE_INDEX|Nifty%50".
+    # We extract the right-hand side and normalise it to match INSTRUMENT_MAP keys.
+    valid_keys       = []
+    unmapped_symbols = []
+
     for raw_sym in RAW_SYMBOLS:
-        clean_name = raw_sym.split("|")[-1].replace('%50', ' 50').replace('%20', ' ').strip().upper()
-        key = get_instrument_key(clean_name)
+        right_side = raw_sym.split('|')[-1]   # e.g. "HDFCBANK", "Nifty%50", "SENSEX"
+        # Normalise URL-encoded index names
+        clean_name = (
+            right_side
+            .replace('%50', ' 50')
+            .replace('%20', ' ')
+            .strip()
+            .upper()
+        )
+        # Translate to our canonical index names used as INSTRUMENT_MAP aliases
+        if 'NIFTY' in clean_name and '50' in clean_name:
+            clean_name = 'NIFTY_50'
+        elif 'BANK' in clean_name and 'NIFTY' in clean_name:
+            clean_name = 'NIFTY_BANK'
+
+        key = INSTRUMENT_MAP.get(clean_name)
         if key:
             valid_keys.append(key)
-    print(f"🎯 [LiveFeed] Resolved {len(valid_keys)} instrument keys. Starting fetch loop.")
+        else:
+            unmapped_symbols.append(clean_name)
+
+    print(f"🎯 [LiveFeed] Successfully resolved {len(valid_keys)} instrument keys.")
+    if unmapped_symbols:
+        print(f"⚠️  [LiveFeed] Failed to map {len(unmapped_symbols)} symbols. "
+              f"Examples: {unmapped_symbols[:10]}")
 
     BATCH_SIZE = 50
     SLEEP_BETWEEN_BATCHES = 0.5   # seconds — respects Upstox rate limits
