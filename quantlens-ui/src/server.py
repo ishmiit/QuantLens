@@ -9,7 +9,7 @@ import asyncio
 import json
 import urllib.parse
 from decimal import Decimal
-import joblib
+import xgboost as xgb
 import os
 import requests
 import zlib
@@ -182,32 +182,35 @@ class TradePayload(BaseModel):
 # --- GLOBAL SIGNAL CACHE (The Debouncer) ---
 sent_signals = {}
 
-# --- LOAD MODELS ---
-sniper_model = None
+# --- LOAD MODELS (native XGBoost JSON — no pickle, no joblib) ---
+sniper_model  = None
 voyager_model = None
 
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "python_engine", "src")
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR  = os.path.join(BASE_DIR, "..", "..", "ml_engine")
 
-sniper_path = os.path.join(MODEL_DIR, "intraday_model.joblib")
-voyager_path = os.path.join(MODEL_DIR, "swing_model.joblib")
+sniper_path  = os.path.join(MODEL_DIR, "model_intraday.json")
+voyager_path = os.path.join(MODEL_DIR, "model_swing.json")
 
 try:
     if os.path.exists(sniper_path):
-        sniper_model = joblib.load(sniper_path)
-        print("🎯 Sniper Model Loaded (Intraday)")
+        sniper_model = xgb.Booster()
+        sniper_model.load_model(sniper_path)
+        print("🎯 Sniper Model Loaded (Intraday XGBoost JSON)")
     else:
-        print(f"⚠️ Sniper model missing at: {sniper_path}")
-        
+        print(f"⚠️ Sniper model not found at: {sniper_path}")
+
     if os.path.exists(voyager_path):
-        voyager_model = joblib.load(voyager_path)
-        print("🚢 Voyager Model Loaded (Swing)")
+        voyager_model = xgb.Booster()
+        voyager_model.load_model(voyager_path)
+        print("🛢️ Voyager Model Loaded (Swing XGBoost JSON)")
     else:
-        print(f"⚠️ Voyager model missing at: {voyager_path}")
+        print(f"⚠️ Voyager model not found at: {voyager_path}")
 except Exception as e:
-    print(f"❌ Error loading models: {e}")
+    print(f"❌ Error loading XGBoost models: {e}")
+
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -969,19 +972,66 @@ async def upstox_live_feed():
         print(f"❌ [LiveFeed] Initialization error: {e}")
         return
 
-    # --- Step 3: Download & parse the Upstox master instrument list ---
-    # This populates the global INSTRUMENT_MAP (symbol → key) and
-    # KEY_TO_SYMBOL (key → clean symbol) used by the rest of the server.
+# ---------------------------------------------------------------------------
+# Standalone sync helper — runs in a thread pool so the event loop never blocks.
+# Returns the raw bytes of the gzip-compressed CSV from Upstox.
+# ---------------------------------------------------------------------------
+def _fetch_master_csv() -> bytes:
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
+    resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
+    resp.raise_for_status()
+    return resp.content
+
+
+async def upstox_live_feed():
+    """Background task: poll Upstox REST quotes and broadcast in-memory to all WebSocket clients."""
+    import upstox_client
+
+    global in_memory_ticks, AVG_VOL_CACHE, AI_FEATURE_CACHE, active_connections
+
+    print("🚀 [LiveFeed] Starting in-memory Upstox live feed...")
+
+    # --- Step 1: Load token from Neon DB ---
+    try:
+        conn_init = get_db_connection()
+        cur = conn_init.cursor()
+        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
+        row = cur.fetchone()
+        if not row:
+            print("🔴 [LiveFeed] UPSTOX_TOKEN missing from system_config. Aborting feed.")
+            cur.close()
+            conn_init.close()
+            return
+        access_token = row[0]
+
+        # --- Step 2: Pre-load avg volume & AI feature caches from ticker_master ---
+        print("📊 [LiveFeed] Loading avg-volume & AI feature caches from ticker_master...")
+        cur.execute("SELECT symbol, avg_vol_20d, rsi, volatility, dist_sma20, cluster_id FROM ticker_master")
+        for r in cur.fetchall():
+            sym = r[0]
+            AVG_VOL_CACHE[sym] = float(r[1]) if r[1] else 1.0
+            AI_FEATURE_CACHE[sym] = {
+                'rsi':         float(r[2]) if r[2] is not None else 50.0,
+                'volatility':  float(r[3]) if r[3] is not None else 0.015,
+                'dist_sma_20': float(r[4]) if r[4] is not None else 0.0,
+                'cluster_id':  int(r[5])   if r[5] is not None else 0,
+            }
+        cur.close()
+        conn_init.close()
+        print(f"✅ [LiveFeed] Caches loaded: {len(AVG_VOL_CACHE)} symbols.")
+    except Exception as e:
+        print(f"❌ [LiveFeed] Initialization error: {e}")
+        return
+
+    # --- Step 3: Download & parse the Upstox master instrument list (async) ---
+    # _fetch_master_csv() is a blocking I/O call; asyncio.to_thread() runs it in a
+    # thread pool so the event loop is never blocked waiting on the network.
     print("📡 [LiveFeed] Downloading Upstox master instrument list...")
     try:
-        csv_url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
-        csv_response = await asyncio.to_thread(
-            requests.get, csv_url,
-            **{"headers": {'User-Agent': 'Mozilla/5.0'}, "timeout": 30}
-        )
-        csv_response.raise_for_status()
-        csv_content = zlib.decompress(csv_response.content, zlib.MAX_WBITS | 16)
-        master_df = pd.read_csv(io.BytesIO(csv_content))
+        raw_csv_bytes = await asyncio.to_thread(_fetch_master_csv)
+        print("✅ [LiveFeed] Master list downloaded successfully.")
+        csv_content = zlib.decompress(raw_csv_bytes, zlib.MAX_WBITS | 16)
+        master_df   = pd.read_csv(io.BytesIO(csv_content))
 
         for _, row in master_df.iterrows():
             t_symbol = str(row['tradingsymbol']).strip().upper()
