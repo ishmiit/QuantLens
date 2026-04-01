@@ -283,7 +283,7 @@ function App() {
     const mainList = stocks.filter(s =>
       s.symbol !== 'NIFTY 50' &&
       s.symbol !== 'SENSEX' &&
-      s.symbol !== 'BANKNIFTY'
+      s.symbol !== 'BANK NIFTY'
     );
 
     let result = mainList.filter(s => s.symbol.toLowerCase().includes(search.toLowerCase()));
@@ -579,7 +579,7 @@ function App() {
           {[
             { label: 'NIFTY 50', key: 'NIFTY 50' },
             { label: 'SENSEX', key: 'SENSEX' },
-            { label: 'BANK NIFTY', key: 'BANKNIFTY' },
+            { label: 'BANK NIFTY', key: 'BANK NIFTY' },
           ].map((idx) => {
             const data = getIndexData(idx.key);
             return (
@@ -606,7 +606,7 @@ function App() {
           {[
             { label: 'NF50',  key: 'NIFTY 50' },
             { label: 'SNX',   key: 'SENSEX' },
-            { label: 'BNF',   key: 'BANKNIFTY' },
+            { label: 'BNF',   key: 'BANK NIFTY' },
           ].map((idx) => {
             const data = getIndexData(idx.key);
             const pct  = data?.change_percent ?? 0;

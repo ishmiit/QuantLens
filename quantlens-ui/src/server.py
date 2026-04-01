@@ -488,41 +488,52 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
 
     # 4. Model Preparation & Inference
     try:
+        import pandas as pd
         from datetime import datetime
-
-        now = datetime.now()
-        day_of_week = now.weekday()
-        time_float = now.hour + (now.minute / 60.0)
+        import pytz
 
         # Volatility is strictly extracted, fallback to atr scaling
         computed_volatility = stock.get('volatility')
         if computed_volatility is None or computed_volatility == 0.0:
              computed_volatility = (safe_atr / price) if price > 0 else 0.015
 
-        # STRICT ML FEATURE MAPPING (12 columns from train_engine.py)
-        feature_cols = [
-            'rvol', 'change_percent', 'cluster_id', 'rsi', 'dist_sma_20', 
-            'volatility', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'time_float'
-        ]
+        ist_now = datetime.now(pytz.timezone('Asia/Kolkata'))
+
         feature_dict = {
-            'rvol': [rvol],
-            'change_percent': [pct_change],
-            'cluster_id': [float(stock.get('cluster_id') or 0.0)],
-            'rsi': [safe_rsi],
-            'dist_sma_20': [safe_dist_sma20],
-            'volatility': [float(computed_volatility)],
-            'adx': [float(adx_val)],
-            'obv': [float(obv_val)],
-            'bb_pb': [float(bb_pb_val)],
-            'vwap_dist': [float(vwap_dist_val)],
-            'day_of_week': [float(day_of_week)],
-            'time_float': [float(time_float)]
+            'rvol': rvol,
+            'change_percent': pct_change,
+            'cluster_id': float(stock.get('cluster_id') or 0.0),
+            'rsi': safe_rsi,
+            'dist_sma_20': safe_dist_sma20,
+            'volatility': float(computed_volatility),
+            'adx': float(adx_val),
+            'obv': float(obv_val),
+            'bb_pb': float(bb_pb_val),
+            'vwap_dist': float(vwap_dist_val),
+            'day_of_week': float(ist_now.weekday()),
+            'time_float': float(ist_now.hour + ist_now.minute / 60.0)
         }
         
-        feature_data = pd.DataFrame(feature_dict)[feature_cols]
-        
+        if 'hour' not in feature_dict: feature_dict['hour'] = ist_now.hour
+        if 'minute' not in feature_dict: feature_dict['minute'] = ist_now.minute
+        if 'price' not in feature_dict: feature_dict['price'] = price
+
+        # Force strict column order
+        required_features = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
+
+        # Convert to DataFrame to safely reorder
+        df_features = pd.DataFrame([feature_dict])
+
+        # Fill any completely missing columns with 0 to prevent crashes
+        for col in required_features:
+            if col not in df_features.columns:
+                df_features[col] = 0.0
+
+        # Reorder exactly
+        df_features = df_features[required_features]
+
         # Convert data to native XGBoost DMatrix
-        dmatrix = xgb.DMatrix(feature_data)
+        dmatrix = xgb.DMatrix(df_features)
         
         # Booster.predict returns a flat array of probabilities (e.g., [0.85])
         prob_sniper = float(sniper_model.predict(dmatrix)[0]) if sniper_model else 0.0
@@ -1159,7 +1170,7 @@ async def upstox_live_feed():
                         
                         reverse_map = {
                             "NSE_INDEX|Nifty 50": "NIFTY 50", 
-                            "NSE_INDEX|Nifty Bank": "BANKNIFTY", 
+                            "NSE_INDEX|Nifty Bank": "BANK NIFTY", 
                             "BSE_INDEX|SENSEX": "SENSEX"
                         }
                         if ikey in reverse_map:
@@ -1230,7 +1241,7 @@ async def upstox_live_feed():
                 sym = s.get('symbol', '')
                 if sym == 'NIFTY 50':   return (0, sym)
                 if sym == 'SENSEX':     return (1, sym)
-                if sym == 'BANKNIFTY':  return (2, sym)
+                if sym == 'BANK NIFTY': return (2, sym)
                 return (3, sym)
 
             all_processed.sort(key=_sort_key)
