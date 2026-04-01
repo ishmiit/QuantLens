@@ -521,29 +521,37 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
             'time_float':     float(ist.hour + ist.minute / 60.0),
         }
 
-        def _run_inference(model):
-            """
-            CRITICAL BYPASS:
-            1. Read the exact feature list the model was trained on from the Booster object itself.
-            2. Extract values from our pool IN THAT EXACT ORDER.
-            3. Pass a raw 2-D numpy array — NO column names — to xgb.DMatrix.
-               XGBoost skips its strict string-name validation for raw arrays
-               and simply does positional math, which is what we want.
-            """
+        def _run_inference(model, feature_pool, model_name="Model"):
             if model is None:
                 return 0.0
-            expected_features = model.feature_names  # e.g. ['price', 'rsi', ...]
-            if not expected_features:
-                # Model has no stored feature names; fall back to full pool order
-                expected_features = list(feature_pool.keys())
-            # Build ordered value row; default 0.0 for any name not in our pool
-            row = [feature_pool.get(f, 0.0) for f in expected_features]
-            raw_array = np.array([row], dtype=np.float32)          # shape (1, n_features)
-            dmatrix   = xgb.DMatrix(raw_array)                     # no feature_names arg!
-            return float(model.predict(dmatrix)[0])
+            try:
+                # Fallback exactly to the known training columns if the Booster lost them
+                expected_features = model.feature_names
+                if expected_features is None:
+                    expected_features = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
+                
+                # Safely extract floats
+                row = [float(feature_pool.get(f, 0.0)) for f in expected_features]
+                
+                # Convert to 2D numpy array to bypass naming validation
+                raw_array = np.array([row], dtype=np.float32)
+                dmatrix = xgb.DMatrix(raw_array)
+                
+                # Predict
+                raw_prob = float(model.predict(dmatrix)[0])
+                
+                # LOG THE SUCCESS SO WE CAN SEE IT IN RENDER
+                print(f"🎯 [DEBUG {model_name}] Extracted Row: {row[:3]}... | Output Prob: {raw_prob}")
+                
+                return raw_prob
+                
+            except Exception as e:
+                # DO NOT FAIL SILENTLY. SCREAM IN THE LOGS.
+                print(f"❌ [CRITICAL AI CRASH - {model_name}]: {str(e)}")
+                return 0.0
 
-        prob_sniper  = _run_inference(sniper_model)
-        prob_voyager = _run_inference(voyager_model)
+        prob_sniper  = _run_inference(sniper_model, feature_pool, "SNIPER")
+        prob_voyager = _run_inference(voyager_model, feature_pool, "VOYAGER")
     except Exception as e:
         import traceback
         print(f"❌ Inference Error for {symbol}: {e}")
