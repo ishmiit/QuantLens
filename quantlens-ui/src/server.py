@@ -491,51 +491,57 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         import pandas as pd
         from datetime import datetime
         import pytz
+        import xgboost as xgb
 
-        # Volatility is strictly extracted, fallback to atr scaling
+        # Setup snippet-compatible variables
+        current_price = price
+        feature_data = stock.copy()
+        
+        # Volatility fallback calculation
         computed_volatility = stock.get('volatility')
         if computed_volatility is None or computed_volatility == 0.0:
              computed_volatility = (safe_atr / price) if price > 0 else 0.015
 
-        ist_now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # Ensure feature_data contains all calculated features so .get() accesses them
+        feature_data['rsi'] = safe_rsi
+        feature_data['volatility'] = computed_volatility
+        feature_data['dist_sma_20'] = safe_dist_sma20
+        feature_data['rvol'] = rvol
+        feature_data['change_percent'] = pct_change
+        feature_data['adx'] = adx_val
+        feature_data['obv'] = obv_val
+        feature_data['bb_pb'] = bb_pb_val
+        feature_data['vwap_dist'] = vwap_dist_val
 
-        feature_dict = {
-            'rvol': rvol,
-            'change_percent': pct_change,
-            'cluster_id': float(stock.get('cluster_id') or 0.0),
-            'rsi': safe_rsi,
-            'dist_sma_20': safe_dist_sma20,
-            'volatility': float(computed_volatility),
-            'adx': float(adx_val),
-            'obv': float(obv_val),
-            'bb_pb': float(bb_pb_val),
-            'vwap_dist': float(vwap_dist_val),
-            'day_of_week': float(ist_now.weekday()),
-            'time_float': float(ist_now.hour + ist_now.minute / 60.0)
+        # Get exact IST time
+        ist = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+        # Forcefully construct a bulletproof dictionary with defaults if missing
+        # NOTE: Ensure you are passing the 'current_price' into this function from the live tick!
+        safe_features = {
+            'price': float(current_price), # MUST BE EXTRACTED FROM LIVE TICK
+            'rsi': float(feature_data.get('rsi', 50.0)),
+            'volatility': float(feature_data.get('volatility', 0.0)),
+            'dist_sma_20': float(feature_data.get('dist_sma_20', 0.0)),
+            'rvol': float(feature_data.get('rvol', 1.0)),
+            'change_percent': float(feature_data.get('change_percent', 0.0)),
+            'cluster_id': int(feature_data.get('cluster_id', 0)),
+            'adx': float(feature_data.get('adx', 20.0)),
+            'obv': float(feature_data.get('obv', 0.0)),
+            'bb_pb': float(feature_data.get('bb_pb', 0.5)),
+            'vwap_dist': float(feature_data.get('vwap_dist', 0.0)),
+            'day_of_week': int(ist.weekday()),
+            'hour': int(ist.hour),
+            'minute': int(ist.minute),
+            'time_float': float(ist.hour + ist.minute / 60.0)
         }
-        
-        if 'hour' not in feature_dict: feature_dict['hour'] = ist_now.hour
-        if 'minute' not in feature_dict: feature_dict['minute'] = ist_now.minute
-        if 'price' not in feature_dict: feature_dict['price'] = price
 
-        # Force strict column order
-        required_features = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
+        # Create DataFrame and FORCE exact column order
+        ordered_columns = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
+        df_safe = pd.DataFrame([safe_features])[ordered_columns]
 
-        # Convert to DataFrame to safely reorder
-        df_features = pd.DataFrame([feature_dict])
-
-        # Fill any completely missing columns with 0 to prevent crashes
-        for col in required_features:
-            if col not in df_features.columns:
-                df_features[col] = 0.0
-
-        # Reorder exactly
-        df_features = df_features[required_features]
-
-        # Convert data to native XGBoost DMatrix
-        dmatrix = xgb.DMatrix(df_features)
-        
-        # Booster.predict returns a flat array of probabilities (e.g., [0.85])
+        # Run Inference
+        dmatrix = xgb.DMatrix(df_safe)
         prob_sniper = float(sniper_model.predict(dmatrix)[0]) if sniper_model else 0.0
         prob_voyager = float(voyager_model.predict(dmatrix)[0]) if voyager_model else 0.0
     except Exception as e:
