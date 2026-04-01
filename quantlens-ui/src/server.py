@@ -326,6 +326,61 @@ async def reset_signals():
     print("🧹 Signal cache cleared manually via API")
     return {"status": "success", "message": "Signal cache cleared"}
 
+import pandas as pd
+import xgboost as xgb
+from datetime import datetime
+import pytz
+
+EXPECTED_FEATURES = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 
+                     'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 
+                     'hour', 'minute', 'time_float']
+
+def get_live_prediction(model, current_price, cached_data, symbol="Unknown"):
+    """
+    Strict, capital-ready inference. Demands 100% real data.
+    If any feature is missing, it skips the prediction to protect capital.
+    """
+    if not cached_data:
+        return 0.0
+        
+    try:
+        ist = datetime.now(pytz.timezone('Asia/Kolkata'))
+        
+        # 1. Start with the guaranteed live data
+        live_data = {
+            'price': float(current_price),
+            'day_of_week': int(ist.weekday()),
+            'hour': int(ist.hour),
+            'minute': int(ist.minute),
+            'time_float': float(ist.hour + ist.minute / 60.0)
+        }
+        
+        # 2. The Hard Gate: Safely pull technicals from the DB cache
+        technicals = ['rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 
+                      'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist']
+                      
+        for tech in technicals:
+            val = cached_data.get(tech)
+            if val is None or pd.isna(val):
+                # SILENT ABORT: We are missing real data. Do not guess. Do not crash.
+                # print(f"⚠️ [{symbol}] Hard Gate Closed: Missing real '{tech}' data.")
+                return 0.0
+            live_data[tech] = float(val)
+            
+        # 3. If we reach here, we have 100% REAL data for all 15 features.
+        # Convert to DataFrame to guarantee perfect XGBoost column alignment.
+        df = pd.DataFrame([live_data], columns=EXPECTED_FEATURES)
+        
+        # 4. Execute Inference
+        dmatrix = xgb.DMatrix(df)
+        prob = float(model.predict(dmatrix)[0])
+        
+        return prob
+        
+    except Exception as e:
+        print(f"❌ [INFERENCE CRASH - {symbol}]: {str(e)}")
+        return 0.0
+
 def run_monte_carlo(price, target, stop_loss, volatility_pct, days=20, sims=1000000):
     if price <= 0 or volatility_pct <= 0 or target == stop_loss:
         return 0.0
@@ -488,67 +543,25 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
 
     # 4. Model Preparation & Inference
     try:
-        import numpy as np
-        from datetime import datetime
-        import pytz
-        import xgboost as xgb
-
-        # Get exact IST time
-        ist = datetime.now(pytz.timezone('Asia/Kolkata'))
-
         # Volatility fallback calculation
         computed_volatility = stock.get('volatility')
         if computed_volatility is None or computed_volatility == 0.0:
             computed_volatility = (safe_atr / price) if price > 0 else 0.015
 
-        # Build a full feature pool with all possible keys and sensible defaults.
-        # This is the master lookup — order does NOT matter here.
-        feature_pool = {
-            'price':          float(price),
-            'rsi':            float(safe_rsi),
-            'volatility':     float(computed_volatility),
-            'dist_sma_20':    float(safe_dist_sma20),
-            'rvol':           float(rvol),
-            'change_percent': float(pct_change),
-            'cluster_id':     float(stock.get('cluster_id') or 0),
-            'adx':            float(adx_val),
-            'obv':            float(obv_val),
-            'bb_pb':          float(bb_pb_val),
-            'vwap_dist':      float(vwap_dist_val),
-            'day_of_week':    float(ist.weekday()),
-            'hour':           float(ist.hour),
-            'minute':         float(ist.minute),
-            'time_float':     float(ist.hour + ist.minute / 60.0),
-        }
+        # Populate the dictionary so our Hard Gate accepts it natively
+        stock['rsi'] = safe_rsi
+        stock['volatility'] = computed_volatility
+        stock['dist_sma_20'] = safe_dist_sma20
+        stock['rvol'] = rvol
+        stock['change_percent'] = pct_change
+        stock['adx'] = adx_val
+        stock['obv'] = obv_val
+        stock['bb_pb'] = bb_pb_val
+        stock['vwap_dist'] = vwap_dist_val
 
-        def _run_inference(model, feature_pool, model_name="Model"):
-            try:
-                # 1. Get the exact list of names the model demands
-                expected_features = model.feature_names
-                if expected_features is None:
-                    expected_features = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
-                
-                # 2. Extract values in that exact strict order
-                row = [float(feature_pool.get(f, 0.0)) for f in expected_features]
-                
-                # 3. Create the numpy array
-                raw_array = np.array([row], dtype=np.float32)
-                
-                # 4. CRITICAL FIX: Explicitly attach the expected names to the DMatrix
-                dmatrix = xgb.DMatrix(raw_array, feature_names=expected_features)
-                
-                # 5. Predict
-                raw_prob = float(model.predict(dmatrix)[0])
-                
-                print(f"🎯 [DEBUG {model_name}] Inference Success | Output Prob: {raw_prob}")
-                return raw_prob
-                
-            except Exception as e:
-                print(f"❌ [CRITICAL AI CRASH - {model_name}]: {str(e)}")
-                return 0.0
-
-        prob_sniper  = _run_inference(sniper_model, feature_pool, "SNIPER")
-        prob_voyager = _run_inference(voyager_model, feature_pool, "VOYAGER")
+        prob_sniper = get_live_prediction(sniper_model, price, stock, symbol)
+        prob_voyager = get_live_prediction(voyager_model, price, stock, symbol)
+        
     except Exception as e:
         import traceback
         print(f"❌ Inference Error for {symbol}: {e}")
