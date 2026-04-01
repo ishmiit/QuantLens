@@ -522,31 +522,28 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         }
 
         def _run_inference(model, feature_pool, model_name="Model"):
-            if model is None:
-                return 0.0
             try:
-                # Fallback exactly to the known training columns if the Booster lost them
+                # 1. Get the exact list of names the model demands
                 expected_features = model.feature_names
                 if expected_features is None:
                     expected_features = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist', 'day_of_week', 'hour', 'minute', 'time_float']
                 
-                # Safely extract floats
+                # 2. Extract values in that exact strict order
                 row = [float(feature_pool.get(f, 0.0)) for f in expected_features]
                 
-                # Convert to 2D numpy array to bypass naming validation
+                # 3. Create the numpy array
                 raw_array = np.array([row], dtype=np.float32)
-                dmatrix = xgb.DMatrix(raw_array)
                 
-                # Predict
+                # 4. CRITICAL FIX: Explicitly attach the expected names to the DMatrix
+                dmatrix = xgb.DMatrix(raw_array, feature_names=expected_features)
+                
+                # 5. Predict
                 raw_prob = float(model.predict(dmatrix)[0])
                 
-                # LOG THE SUCCESS SO WE CAN SEE IT IN RENDER
-                print(f"🎯 [DEBUG {model_name}] Extracted Row: {row[:3]}... | Output Prob: {raw_prob}")
-                
+                print(f"🎯 [DEBUG {model_name}] Inference Success | Output Prob: {raw_prob}")
                 return raw_prob
                 
             except Exception as e:
-                # DO NOT FAIL SILENTLY. SCREAM IN THE LOGS.
                 print(f"❌ [CRITICAL AI CRASH - {model_name}]: {str(e)}")
                 return 0.0
 
