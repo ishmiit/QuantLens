@@ -281,9 +281,9 @@ function App() {
 
   const filteredStocks = useMemo(() => {
     const mainList = stocks.filter(s =>
-      s.symbol !== 'NIFTY_50' &&
+      s.symbol !== 'NIFTY 50' &&
       s.symbol !== 'SENSEX' &&
-      s.symbol !== 'NIFTY_BANK'
+      s.symbol !== 'BANKNIFTY'
     );
 
     let result = mainList.filter(s => s.symbol.toLowerCase().includes(search.toLowerCase()));
@@ -577,9 +577,9 @@ function App() {
         {/* DESKTOP INDICES VIEW */}
         <div className="hidden md:grid grid-cols-3 gap-6 shrink-0">
           {[
-            { label: 'NIFTY 50', key: 'NIFTY_50' },
+            { label: 'NIFTY 50', key: 'NIFTY 50' },
             { label: 'SENSEX', key: 'SENSEX' },
-            { label: 'BANK NIFTY', key: 'NIFTY_BANK' },
+            { label: 'BANK NIFTY', key: 'BANKNIFTY' },
           ].map((idx) => {
             const data = getIndexData(idx.key);
             return (
@@ -604,9 +604,9 @@ function App() {
         {/* MOBILE INDICES STRIP — single-line, tighter labels */}
         <div className="flex md:hidden flex-row items-center justify-between w-full px-3 py-1.5 bg-black border-b border-zinc-900 shrink-0 gap-2">
           {[
-            { label: 'NF50',  key: 'NIFTY_50' },
+            { label: 'NF50',  key: 'NIFTY 50' },
             { label: 'SNX',   key: 'SENSEX' },
-            { label: 'BNF',   key: 'NIFTY_BANK' },
+            { label: 'BNF',   key: 'BANKNIFTY' },
           ].map((idx) => {
             const data = getIndexData(idx.key);
             const pct  = data?.change_percent ?? 0;

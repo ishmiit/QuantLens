@@ -219,6 +219,7 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(obj)
 
 def get_instrument_key(clean_symbol):
+    clean_symbol = clean_symbol.split(':')[-1]
     clean_name = clean_symbol.upper().strip()
     if "NIFTY_50" in clean_name:
         return INSTRUMENT_MAP.get("NIFTY 50") or "NSE_INDEX|Nifty 50"
@@ -520,8 +521,12 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         
         feature_data = pd.DataFrame(feature_dict)[feature_cols]
         
-        prob_sniper = float(sniper_model.predict_proba(feature_data)[0][1]) if sniper_model else 0.0
-        prob_voyager = float(voyager_model.predict_proba(feature_data)[0][1]) if voyager_model else 0.0
+        # Convert data to native XGBoost DMatrix
+        dmatrix = xgb.DMatrix(feature_data)
+        
+        # Booster.predict returns a flat array of probabilities (e.g., [0.85])
+        prob_sniper = float(sniper_model.predict(dmatrix)[0]) if sniper_model else 0.0
+        prob_voyager = float(voyager_model.predict(dmatrix)[0]) if voyager_model else 0.0
     except Exception as e:
         import traceback
         print(f"❌ Inference Error for {symbol}: {e}")
@@ -1151,7 +1156,16 @@ async def upstox_live_feed():
                         # Resolve human symbol from KEY_TO_SYMBOL Rosetta Stone
                         t_sym = getattr(details, 'trading_symbol', None)
                         raw_sym = str(t_sym).strip().upper() if t_sym else ikey
-                        db_symbol = KEY_TO_SYMBOL.get(ikey, raw_sym).replace("-EQ", "")
+                        
+                        reverse_map = {
+                            "NSE_INDEX|Nifty 50": "NIFTY 50", 
+                            "NSE_INDEX|Nifty Bank": "BANKNIFTY", 
+                            "BSE_INDEX|SENSEX": "SENSEX"
+                        }
+                        if ikey in reverse_map:
+                            db_symbol = reverse_map[ikey]
+                        else:
+                            db_symbol = KEY_TO_SYMBOL.get(ikey, raw_sym).replace("-EQ", "")
 
                         price      = float(getattr(details, 'last_price', 0.0) or 0.0)
                         prev_close = float(getattr(details, 'last_close', 0.0) or 0.0)
@@ -1214,9 +1228,9 @@ async def upstox_live_feed():
             # Sort: Indices first, equities by symbol
             def _sort_key(s):
                 sym = s.get('symbol', '')
-                if sym == 'NIFTY_50':   return (0, sym)
+                if sym == 'NIFTY 50':   return (0, sym)
                 if sym == 'SENSEX':     return (1, sym)
-                if sym == 'NIFTY_BANK': return (2, sym)
+                if sym == 'BANKNIFTY':  return (2, sym)
                 return (3, sym)
 
             all_processed.sort(key=_sort_key)
