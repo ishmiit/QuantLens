@@ -269,7 +269,11 @@ function App() {
   const totalUsed = entryNum * qtyNum;
   const totalRisk = Math.abs(entryNum - calculatedSL) * qtyNum;
 
-  const getIndexData = (key: string) => stocks.find(s => s.symbol === key);
+  const getIndexData = (searchTerms: string[]) => {
+    return stocks.find(s => 
+      searchTerms.some(term => s.symbol.toUpperCase().includes(term.toUpperCase()))
+    );
+  };
 
   const handleSendToForge = (stock: any) => {
     const symbol = cleanSymbol(stock.symbol).toUpperCase();
@@ -577,11 +581,11 @@ function App() {
         {/* DESKTOP INDICES VIEW */}
         <div className="hidden md:grid grid-cols-3 gap-6 shrink-0">
           {[
-            { label: 'NIFTY 50', key: 'NIFTY 50' },
-            { label: 'SENSEX', key: 'SENSEX' },
-            { label: 'BANK NIFTY', key: 'BANK NIFTY' },
+            { label: 'NIFTY 50', searchTerms: ["NIFTY 50", "NIFTY50"] },
+            { label: 'SENSEX', searchTerms: ["SENSEX"] },
+            { label: 'BANK NIFTY', searchTerms: ["BANK NIFTY", "NIFTY BANK", "BANKNIFTY"] },
           ].map((idx) => {
-            const data = getIndexData(idx.key);
+            const data = getIndexData(idx.searchTerms);
             return (
               <div
                 key={idx.label}
@@ -604,11 +608,11 @@ function App() {
         {/* MOBILE INDICES STRIP — single-line, tighter labels */}
         <div className="flex md:hidden flex-row items-center justify-between w-full px-3 py-1.5 bg-black border-b border-zinc-900 shrink-0 gap-2">
           {[
-            { label: 'NF50',  key: 'NIFTY 50' },
-            { label: 'SNX',   key: 'SENSEX' },
-            { label: 'BNF',   key: 'BANK NIFTY' },
+            { label: 'NF50',  searchTerms: ["NIFTY 50", "NIFTY50"] },
+            { label: 'SNX',   searchTerms: ["SENSEX"] },
+            { label: 'BNF',   searchTerms: ["BANK NIFTY", "NIFTY BANK", "BANKNIFTY"] },
           ].map((idx) => {
-            const data = getIndexData(idx.key);
+            const data = getIndexData(idx.searchTerms);
             const pct  = data?.change_percent ?? 0;
             return (
               <div key={idx.label} className="flex items-baseline gap-1.5 min-w-0">
