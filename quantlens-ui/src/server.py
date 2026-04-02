@@ -144,6 +144,17 @@ async def startup_event():
             )
         """)
         # legacy ALTER code removed to strictly preserve schema
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ticker_history (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT,
+                price DECIMAL,
+                ai_signal TEXT,
+                confidence DECIMAL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ticker_history_symbol ON ticker_history(symbol)")
         conn.commit()
         cur.close()
         print("✅ DB Schema Verified & Hardened.")
@@ -158,7 +169,8 @@ async def startup_event():
     # --- PHASE 2: LAUNCH IN-MEMORY LIVE FEED ---
     # The feed task itself will download the instrument CSV on first boot.
     # Historical baseline is pre-seeded by sync_history.py via GitHub Actions CRON.
-    print("🚀 Startup complete. Launching in-memory live feed background task...")
+    print("🚀 Startup complete. Launching background tasks...")
+    asyncio.create_task(data_janitor_loop())
     asyncio.create_task(upstox_live_feed())
 
 class ForgeTrade(BaseModel):
@@ -180,6 +192,24 @@ class TradePayload(BaseModel):
 
 # --- GLOBAL SIGNAL CACHE (The Debouncer) ---
 sent_signals = {}
+last_history_write = {}
+
+async def data_janitor_loop():
+    while True:
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM ticker_history WHERE timestamp < NOW() - INTERVAL '24 hours';")
+            conn.commit()
+            cursor.close()
+            print("🧹 [Janitor] Purged historical data older than 24 hours.")
+        except Exception as e:
+            print(f"❌ [Janitor Error]: {e}")
+        finally:
+            if conn:
+                conn.close()
+        await asyncio.sleep(3600)  # Sleep for 1 hour
 
 # --- LOAD MODELS (native XGBoost JSON — no pickle, no joblib) ---
 sniper_model  = None
@@ -724,66 +754,35 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
 # --- NEW: FORGE AUDIT ENDPOINT ---
 @app.get("/audit/{symbol}")
 async def get_audit(symbol: str):
-    clean_symbol = urllib.parse.unquote(symbol)
-    
-    # Translate symbol to Upstox key
-    instrument_key = get_instrument_key(clean_symbol)
-    if not instrument_key:
-        return {"symbol": clean_symbol, "data": [], "error": "Failed to fetch from broker - Unknown symbol key"}
-        
+    clean_symbol = urllib.parse.unquote(symbol).upper()
     conn = None
     try:
-        # Fetch the token
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
-        token_row = cur.fetchone()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT timestamp, price, ai_signal, confidence 
+            FROM ticker_history 
+            WHERE symbol = %s 
+            ORDER BY timestamp ASC
+        """, (clean_symbol,))
+        rows = cur.fetchall()
         cur.close()
         
-        if not token_row:
-            return {"symbol": clean_symbol, "data": [], "error": "Failed to fetch from broker - Missing token"}
-            
-        access_token = token_row[0]
-        
-        # Upstox Historical API: 5-minute intraday candles
-        import requests
-        safe_key = urllib.parse.quote(instrument_key)
-        url = f"https://api.upstox.com/v2/historical-candle/intraday/{safe_key}/5minute"
-        
-        headers = {
-            'Accept': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
-        
-        response = await asyncio.to_thread(requests.get, url, headers=headers)
-        
-        if response.status_code != 200:
-            return {"symbol": clean_symbol, "data": [], "error": f"Failed to fetch from broker - API Error {response.status_code}"}
-            
-        raw_data = response.json().get('data', {}).get('candles', [])
-        
-        # Format the response exactly as frontend expects: 
-        # Upstox returns: [timestamp, open, high, low, close, volume, oi]
+        # Format mapping since Frontend expects certain properties
         chart_data = []
-        for candle in raw_data:
+        for r in rows:
             chart_data.append({
-                "timestamp": candle[0],
-                "open": float(candle[1]),
-                "high": float(candle[2]),
-                "low": float(candle[3]),
-                "close": float(candle[4]),
-                "volume": float(candle[5])
+                "timestamp": str(r['timestamp']),
+                "close": float(r['price']),
+                "ai_signal": str(r['ai_signal']),
+                "confidence": float(r['confidence'])
             })
             
-        # Standardize order - Upstox sends newest first, clients almost always want oldest first
-        chart_data.reverse()
-        
         return {"symbol": clean_symbol, "data": chart_data}
-        
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {"symbol": clean_symbol, "data": [], "error": f"Failed to fetch from broker"}
+        return {"symbol": clean_symbol, "data": [], "error": f"Failed to fetch audit: {str(e)}"}
     finally:
         if conn:
             conn.close()
@@ -1234,6 +1233,24 @@ async def upstox_live_feed():
                             conn_hist.rollback()
                             print(f"❌ [DB Error] Failed to upsert {db_symbol}: {db_err}")
                             
+                        # --- Task 2: Throttled Insert into History ---
+                        import time
+                        current_time = time.time()
+                        last_write = last_history_write.get(db_symbol, 0)
+                        
+                        if current_time - last_write > 60:
+                            try:
+                                cursor = conn_hist.cursor()
+                                cursor.execute("""
+                                    INSERT INTO ticker_history (symbol, price, ai_signal, confidence)
+                                    VALUES (%s, %s, %s, %s);
+                                """, (db_symbol, db_price, db_ai_signal, db_confidence))
+                                conn_hist.commit()
+                                cursor.close()
+                                last_history_write[db_symbol] = current_time
+                            except Exception as e:
+                                conn_hist.rollback()
+                                
                         all_processed.append(processed)
 
                 except upstox_client.rest.ApiException as api_e:
