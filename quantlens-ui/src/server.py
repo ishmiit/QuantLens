@@ -341,6 +341,7 @@ def get_live_prediction(model, current_price, cached_data, symbol="Unknown"):
     If any feature is missing, it skips the prediction to protect capital.
     """
     if not cached_data:
+        print(f"⏳ [{symbol}] AI Waiting: Indicator cache is completely empty. Forge hasn't finished yet.")
         return 0.0
         
     try:
@@ -1125,7 +1126,20 @@ async def upstox_live_feed():
 
         key = None
 
-        if segment == 'NSE_EQ':
+        # Hardcode explicit overrides to absolutely guarantee pipes instead of colons or other malformations
+        OVERRIDE_MAP = {
+            "NIFTY 50": "NSE_INDEX|Nifty 50",
+            "NIFTY50": "NSE_INDEX|Nifty 50",
+            "NIFTY_50": "NSE_INDEX|Nifty 50",
+            "BANK NIFTY": "NSE_INDEX|Nifty Bank",
+            "NIFTY BANK": "NSE_INDEX|Nifty Bank",
+            "NIFTY_BANK": "NSE_INDEX|Nifty Bank",
+            "SENSEX": "BSE_INDEX|SENSEX"
+        }
+        
+        if right_side.upper() in OVERRIDE_MAP:
+            key = OVERRIDE_MAP[right_side.upper()]
+        elif segment == 'NSE_EQ':
             # Upstox NSE equity keys end in "-EQ"  e.g. "NSE_EQ|HDFCBANK-EQ"
             # INSTRUMENT_MAP has both "HDFCBANK" and "HDFCBANK-EQ" entries (we build both)
             key = INSTRUMENT_MAP.get(right_side.upper())

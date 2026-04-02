@@ -315,6 +315,7 @@ def main():
 
     # Steps 3–5 — per-symbol fetch, compute, upsert
     ok, skipped, failed = 0, 0, 0
+    print(f"🔨 [Forge] Waking up to crunch technicals for {len(YAHOO_SYMBOLS)} stocks...")
     for yahoo_sym in YAHOO_SYMBOLS:
         try:
             result = fetch_and_compute(yahoo_sym)
@@ -326,12 +327,13 @@ def main():
             print(f"✅ SYNC  {result['symbol']:15} | prev={result['prev_close']:.2f}  rsi={result['rsi']:.1f}  vol={result['volatility']:.4f}")
             ok += 1
         except Exception as e:
-            print(f"❌ ERROR  {yahoo_sym}: {e}")
+            print(f"❌ [Forge Error] Failed to fetch candles for {yahoo_sym}: {e}")
             conn.rollback()
             failed += 1
         finally:
             time.sleep(0.3)   # polite rate limiting against Yahoo Finance
 
+    print(f"✅ [Forge] Successfully updated indicator cache in RAM!")
     conn.close()
 
     print("=" * 60)
