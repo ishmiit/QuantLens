@@ -724,41 +724,69 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
 # --- NEW: FORGE AUDIT ENDPOINT ---
 @app.get("/audit/{symbol}")
 async def get_audit(symbol: str):
-    symbol = urllib.parse.unquote(symbol)
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    clean_symbol = urllib.parse.unquote(symbol)
     
-    query = """
-        SELECT 
-            l.symbol, l.price, l.pct_change as live_pct, l.rvol,
-            m.atr, m.rsi, m.dist_sma20, m.prev_close
-        FROM ticker_live l
-        LEFT JOIN ticker_master m ON l.symbol = m.symbol
-        WHERE l.symbol = %s
-    """
-    
-    # FIX: Use .upper() instead of .toUpperCase()
-    cur.execute(query, (symbol.upper(),))
-    stock = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    if not stock:
-        # Debugging: check terminal to see if the symbol actually matched
-        print(f"⚠️ Audit Failed: {symbol.upper()} not found in DB.")
-        # Return empty list gracefully instead of raising an exception/warning
-        return {"symbol": symbol, "data": [], "message": "No audit data available in current session."}
-
-    # Debugging: check terminal to see if ATR is actually coming from Master
-    print(f"✅ Audit Success: {symbol.upper()} - ATR: {stock.get('atr')}, Price: {stock.get('price')}")
-
-    # Request the isolated Monte Carlo compute specifically for the audit view
-    conn_hist = get_db_connection()
+    # Translate symbol to Upstox key
+    instrument_key = get_instrument_key(clean_symbol)
+    if not instrument_key:
+        return {"symbol": clean_symbol, "data": [], "error": "Failed to fetch from broker - Unknown symbol key"}
+        
+    conn = None
     try:
-        processed_data = apply_conviction_logic(stock, conn=conn_hist, run_mc=True)
+        # Fetch the token
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM system_config WHERE key = 'UPSTOX_TOKEN'")
+        token_row = cur.fetchone()
+        cur.close()
+        
+        if not token_row:
+            return {"symbol": clean_symbol, "data": [], "error": "Failed to fetch from broker - Missing token"}
+            
+        access_token = token_row[0]
+        
+        # Upstox Historical API: 5-minute intraday candles
+        import requests
+        safe_key = urllib.parse.quote(instrument_key)
+        url = f"https://api.upstox.com/v2/historical-candle/intraday/{safe_key}/5minute"
+        
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        response = await asyncio.to_thread(requests.get, url, headers=headers)
+        
+        if response.status_code != 200:
+            return {"symbol": clean_symbol, "data": [], "error": f"Failed to fetch from broker - API Error {response.status_code}"}
+            
+        raw_data = response.json().get('data', {}).get('candles', [])
+        
+        # Format the response exactly as frontend expects: 
+        # Upstox returns: [timestamp, open, high, low, close, volume, oi]
+        chart_data = []
+        for candle in raw_data:
+            chart_data.append({
+                "timestamp": candle[0],
+                "open": float(candle[1]),
+                "high": float(candle[2]),
+                "low": float(candle[3]),
+                "close": float(candle[4]),
+                "volume": float(candle[5])
+            })
+            
+        # Standardize order - Upstox sends newest first, clients almost always want oldest first
+        chart_data.reverse()
+        
+        return {"symbol": clean_symbol, "data": chart_data}
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"symbol": clean_symbol, "data": [], "error": f"Failed to fetch from broker"}
     finally:
-        conn_hist.close()
-    return processed_data
+        if conn:
+            conn.close()
             
 @app.post("/execute-forge") 
 async def execute_forge(trade: ForgeTrade):
