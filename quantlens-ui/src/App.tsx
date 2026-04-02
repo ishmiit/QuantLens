@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 
 // @ts-ignore
 import { API_URL, WS_URL } from './config';
@@ -513,71 +514,89 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-black text-white font-mono overflow-hidden">
 
-      {/* --- ALERT TOAST CONTAINER --- */}
-      <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
-        {alerts.map((alert) => (
-          <div
-            key={alert.id}
-            className={`animate-slide-in p-4 rounded-lg border-2 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex flex-col min-w-[240px] backdrop-blur-md ${alert.signal === 'BUY' ? 'border-accent-green bg-black/90' :
-              alert.signal === 'LOGGED' ? 'border-blue-500 bg-black/90' :
-                'border-accent-red bg-black/90'
-              }`}
-          >
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em]">{alert.mode}</span>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${alert.signal === 'BUY' ? 'bg-accent-green text-black' :
-                alert.signal === 'LOGGED' ? 'bg-blue-500 text-white' :
-                  'bg-accent-red text-white'
-                }`}>
-                {alert.signal}
-              </span>
-            </div>
-            <span className="text-xl font-black text-white">{alert.symbol}</span>
-            <div className="mt-2 text-[8px] text-zinc-500 font-bold border-t border-white/10 pt-2">
-              SIGNAL TIME: {new Date().toLocaleTimeString()}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <nav className="hidden md:flex items-center justify-between h-16 bg-gradient-to-r from-black via-zinc-950 to-black border-b border-accent-green/20 px-8 shrink-0 shadow-[0_4px_24px_rgba(57,255,20,0.1)]">
-        <div className="flex items-center w-1/4">
-          <div className="flex flex-col">
-            <span className="text-xl font-black tracking-tighter text-white">
+      <SignedOut>
+        <div className="flex-1 flex flex-col justify-center items-center bg-gradient-to-br from-black via-zinc-950 to-black">
+          <div className="flex flex-col items-center bg-zinc-950 p-10 rounded-2xl border border-accent-green/20 shadow-[0_0_40px_rgba(57,255,20,0.1)]">
+            <h1 className="text-3xl font-black tracking-tighter text-white mb-2">
               QUANT<span className="text-accent-green">LENS</span>
-            </span>
-            <span className="text-[7px] tracking-[0.6em] text-accent-green opacity-70 italic">ADVANCED ANALYTICS</span>
-          </div>
-        </div>
-
-        <div className="flex-1 flex justify-center">
-          <div className="flex bg-zinc-900/80 backdrop-blur-sm rounded-lg p-1 border border-accent-green/10">
-            {['dashboard', 'convictions', 'forge'].map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v as any)}
-                className={`px-8 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${view === v
-                  ? 'bg-accent-green text-black shadow-[0_0_20px_rgba(57,255,20,0.3)]'
-                  : 'text-zinc-500 hover:text-accent-green hover:bg-white/5'
-                  }`}
-              >
-                {v}
+            </h1>
+            <p className="text-xs text-zinc-500 tracking-[0.4em] mb-8 font-bold">SECURE TERMINAL</p>
+            <SignInButton mode="modal">
+              <button className="px-8 py-3 bg-accent-green text-black font-black hover:bg-white transition-all uppercase tracking-widest text-sm rounded-md shadow-[0_0_20px_rgba(57,255,20,0.3)]">
+                Sign In to QuantLens
               </button>
-            ))}
+            </SignInButton>
           </div>
         </div>
+      </SignedOut>
 
-        <div className="w-1/4 flex justify-end">
-          <div className="text-[9px] font-bold text-zinc-500 flex items-center gap-4">
-            <span className="text-accent-green flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-accent-green rounded-full shadow-[0_0_8px_#39ff14] animate-pulse" />
-              {filteredStocks.length} ASSETS LIVE
-            </span>
-          </div>
+      <SignedIn>
+        {/* --- ALERT TOAST CONTAINER --- */}
+        <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
+          {alerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`animate-slide-in p-4 rounded-lg border-2 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex flex-col min-w-[240px] backdrop-blur-md ${alert.signal === 'BUY' ? 'border-accent-green bg-black/90' :
+                alert.signal === 'LOGGED' ? 'border-blue-500 bg-black/90' :
+                  'border-accent-red bg-black/90'
+                }`}
+            >
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em]">{alert.mode}</span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${alert.signal === 'BUY' ? 'bg-accent-green text-black' :
+                  alert.signal === 'LOGGED' ? 'bg-blue-500 text-white' :
+                    'bg-accent-red text-white'
+                  }`}>
+                  {alert.signal}
+                </span>
+              </div>
+              <span className="text-xl font-black text-white">{alert.symbol}</span>
+              <div className="mt-2 text-[8px] text-zinc-500 font-bold border-t border-white/10 pt-2">
+                SIGNAL TIME: {new Date().toLocaleTimeString()}
+              </div>
+            </div>
+          ))}
         </div>
-      </nav>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-28 md:pb-24 space-y-4 md:space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
+        <nav className="hidden md:flex items-center justify-between h-16 bg-gradient-to-r from-black via-zinc-950 to-black border-b border-accent-green/20 px-8 shrink-0 shadow-[0_4px_24px_rgba(57,255,20,0.1)]">
+          <div className="flex items-center w-1/4">
+            <div className="flex flex-col">
+              <span className="text-xl font-black tracking-tighter text-white">
+                QUANT<span className="text-accent-green">LENS</span>
+              </span>
+              <span className="text-[7px] tracking-[0.6em] text-accent-green opacity-70 italic">ADVANCED ANALYTICS</span>
+            </div>
+          </div>
+
+          <div className="flex-1 flex justify-center">
+            <div className="flex bg-zinc-900/80 backdrop-blur-sm rounded-lg p-1 border border-accent-green/10">
+              {['dashboard', 'convictions', 'forge'].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v as any)}
+                  className={`px-8 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${view === v
+                    ? 'bg-accent-green text-black shadow-[0_0_20px_rgba(57,255,20,0.3)]'
+                    : 'text-zinc-500 hover:text-accent-green hover:bg-white/5'
+                    }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="w-1/4 flex justify-end">
+            <div className="text-[9px] font-bold text-zinc-500 flex items-center gap-4">
+              <span className="text-accent-green flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-accent-green rounded-full shadow-[0_0_8px_#39ff14] animate-pulse" />
+                {filteredStocks.length} ASSETS LIVE
+              </span>
+              <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 rounded-md border-2 border-accent-green/50 hover:border-accent-green transition-colors" } }} />
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-28 md:pb-24 space-y-4 md:space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
         {/* DESKTOP INDICES VIEW */}
         <div className="hidden md:grid grid-cols-3 gap-6 shrink-0">
           {[
@@ -1237,26 +1256,27 @@ function App() {
           </section>
         )}
 
-      </main>
+        </main>
 
-      {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      <div className="flex md:hidden fixed bottom-4 left-1/2 transform -translate-x-1/2 w-[92%] max-w-[420px] h-16 rounded-full bg-zinc-950/95 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 items-center justify-evenly px-2">
-        {['dashboard', 'convictions', 'forge'].map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v as any)}
-            className={`flex flex-col items-center justify-center flex-1 h-[75%] mx-1 rounded-full transition-all duration-300 ${
-              view === v
-              ? 'bg-white text-black font-black shadow-lg py-3 px-4'
-              : 'text-zinc-500 font-semibold hover:text-zinc-200'
-            }`}
-          >
-            <span className={`tracking-widest uppercase ${view === v ? 'text-xs font-black' : 'text-[10px]'}`}>
-              {v === 'convictions' ? 'CONVICT' : v.toUpperCase()}
-            </span>
-          </button>
-        ))}
-      </div>
+        {/* --- MOBILE BOTTOM NAVIGATION --- */}
+        <div className="flex md:hidden fixed bottom-4 left-1/2 transform -translate-x-1/2 w-[92%] max-w-[420px] h-16 rounded-full bg-zinc-950/95 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 items-center justify-evenly px-2">
+          {['dashboard', 'convictions', 'forge'].map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v as any)}
+              className={`flex flex-col items-center justify-center flex-1 h-[75%] mx-1 rounded-full transition-all duration-300 ${
+                view === v
+                ? 'bg-white text-black font-black shadow-lg py-3 px-4'
+                : 'text-zinc-500 font-semibold hover:text-zinc-200'
+              }`}
+            >
+              <span className={`tracking-widest uppercase ${view === v ? 'text-xs font-black' : 'text-[10px]'}`}>
+                {v === 'convictions' ? 'CONVICT' : v.toUpperCase()}
+              </span>
+            </button>
+          ))}
+        </div>
+      </SignedIn>
 
       <style>{`
         @keyframes slideIn {
