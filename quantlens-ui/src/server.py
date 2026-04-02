@@ -143,8 +143,7 @@ async def startup_event():
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("ALTER TABLE ticker_live ADD COLUMN IF NOT EXISTS init_vol_rupees NUMERIC DEFAULT 0")
-        cur.execute("ALTER TABLE ticker_live ADD COLUMN IF NOT EXISTS entry_time TIMESTAMP")
+        # legacy ALTER code removed to strictly preserve schema
         conn.commit()
         cur.close()
         print("✅ DB Schema Verified & Hardened.")
@@ -609,19 +608,7 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
             current_init_vol = price * max(float(computed_volatility), 0.02)
             current_sl = price - current_init_vol if signal == 'BUY' else price + current_init_vol
             
-            # Persist the initialization to DB
-            if conn:
-                try:
-                    cur_update = conn.cursor()
-                    cur_update.execute("""
-                        UPDATE ticker_live 
-                        SET entry_time = %s, init_vol_rupees = %s, stop_loss = %s 
-                        WHERE symbol = %s
-                    """, (current_entry_time, current_init_vol, current_sl, symbol))
-                    conn.commit()
-                    cur_update.close()
-                except Exception as e:
-                    print(f"⚠️ Persist Init error for {symbol}: {e}")
+            # Persist logic removed (schema locked)
 
         # --- THE 4-STAGE APEX TRAILING HIERARCHY ---
         days_held = (pd.Timestamp.now(tz='UTC') - pd.Timestamp(current_entry_time)).days
@@ -663,15 +650,7 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
              else:
                  current_sl = min(current_sl, float(stock.get('entry_price') or price) * 0.995)
 
-        # PERSIST TRAILING SL TO DB (Mandatory for server persistence)
-        if conn:
-            try:
-                cur_trail = conn.cursor()
-                cur_trail.execute("UPDATE ticker_live SET stop_loss = %s WHERE symbol = %s", (current_sl, symbol))
-                conn.commit()
-                cur_trail.close()
-            except Exception as e:
-                print(f"⚠️ Trailing SL Persist Error for {symbol}: {e}")
+        # PERSIST TRAILING SL TO DB removed (schema locked)
 
         stock['stop_loss'] = round(current_sl, 2)
         stop_loss = stock['stop_loss'] # Synchronize local variable
@@ -788,34 +767,7 @@ async def execute_forge(trade: ForgeTrade):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
         
-        # We update the ticker_live table to "force" this symbol into a Conviction state.
-        # This uses the parameters you manually tuned in the Forge UI.
-        query = """
-            UPDATE ticker_live 
-            SET 
-                ai_signal = %s,
-                ai_mode = %s,
-                confidence = %s,
-                price = %s,
-                stop_loss = %s,
-                target_price = %s,
-                is_manual_forge = TRUE
-            WHERE symbol = %s
-        """
-        
-        # Note: 'ai_mode' is set to 'FORGE' so you can distinguish it from auto-signals
-        cursor.execute(query, (
-            trade.signal,
-            "MANUAL FORGE",
-            trade.probability,
-            trade.entryPrice,
-            trade.stop_loss,
-            trade.target_price,
-            trade.symbol
-        ))
-        
-        conn.commit()
-        cursor.close()
+        # Legacy ticker_live forge logic removed due to schema lock
         print(f"🚀 Forge Execution: {trade.symbol} @ {trade.entryPrice}")
         return {"status": "success", "message": f"Trade for {trade.symbol} live"}
         
@@ -835,21 +787,7 @@ async def close_trade(symbol: str):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
         
-        # Reset the conviction fields to 'clear' the trade
-        query = """
-            UPDATE ticker_live 
-            SET 
-                ai_signal = NULL,
-                ai_mode = NULL,
-                confidence = 0,
-                stop_loss = NULL,
-                target_price = NULL,
-                is_manual_forge = FALSE
-            WHERE symbol = %s
-        """
-        cursor.execute(query, (symbol.upper(),))
-        conn.commit()
-        cursor.close()
+        # Legacy ticker_live conviction reset removed due to schema lock
         return {"status": "success", "message": f"Closed position for {symbol}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -908,21 +846,7 @@ async def clear_all_trades():
         cursor = conn.cursor()
         # 1. Clear persisted trades
         cursor.execute("TRUNCATE TABLE active_trades")
-        # 2. Reset convictions in ticker_live
-        cursor.execute("""
-            UPDATE ticker_live 
-            SET 
-                ai_mode = NULL, 
-                ai_signal = NULL, 
-                confidence = 0, 
-                is_manual_forge = FALSE,
-                init_vol_rupees = 0
-        """)
-        # Safe reset for entry_time if it exists
-        try:
-            cursor.execute("UPDATE ticker_live SET entry_time = NULL")
-        except:
-            pass
+        # Legacy ticker_live reset removed due to schema lock
             
         conn.commit()
         cursor.close()
@@ -942,21 +866,7 @@ async def delete_individual_trade(symbol: str):
         cursor = conn.cursor()
         # 1. Delete from active_trades
         cursor.execute("DELETE FROM active_trades WHERE symbol = %s", (symbol,))
-        # 2. Reset specific ticker conviction
-        cursor.execute("""
-            UPDATE ticker_live 
-            SET 
-                ai_mode = NULL, 
-                ai_signal = NULL, 
-                confidence = 0, 
-                is_manual_forge = FALSE,
-                init_vol_rupees = 0
-            WHERE symbol = %s
-        """, (symbol,))
-        try:
-            cursor.execute("UPDATE ticker_live SET entry_time = NULL WHERE symbol = %s", (symbol,))
-        except:
-            pass
+        # Legacy specific conviction reset removed due to schema lock
             
         conn.commit()
         cursor.close()
