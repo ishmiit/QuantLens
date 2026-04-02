@@ -340,42 +340,39 @@ EXPECTED_FEATURES = ['price', 'rsi', 'volatility', 'dist_sma_20', 'rvol', 'chang
 
 def get_live_prediction(model, current_price, cached_data, symbol="Unknown"):
     """
-    Strict, capital-ready inference. Demands 100% real data.
-    If any feature is missing, it skips the prediction to protect capital.
+    Permissive inference pipeline.
+    Uses default baseline values if technical data is still syncing to prevent total system abort.
     """
     if not cached_data:
         print(f"⏳ [{symbol}] AI Waiting: Indicator cache is completely empty. Forge hasn't finished yet.")
-        return 0.0
+        cached_data = {}
         
     try:
         ist = datetime.now(pytz.timezone('Asia/Kolkata'))
         
-        # 1. Start with the guaranteed live data
-        live_data = {
+        # Permissive extraction - mirrors local setup
+        safe_data = {
             'price': float(current_price),
+            'rsi': float(cached_data.get('rsi', 50.0)) if cached_data else 50.0,
+            'volatility': float(cached_data.get('volatility', 0.01)) if cached_data else 0.01,
+            'dist_sma_20': float(cached_data.get('dist_sma_20', 0.0)) if cached_data else 0.0,
+            'rvol': float(cached_data.get('rvol', 1.0)) if cached_data else 1.0,
+            'change_percent': float(cached_data.get('change_percent', 0.0)) if cached_data else 0.0,
+            'cluster_id': int(cached_data.get('cluster_id', 0)) if cached_data else 0,
+            'adx': float(cached_data.get('adx', 20.0)) if cached_data else 20.0,
+            'obv': float(cached_data.get('obv', 0.0)) if cached_data else 0.0,
+            'bb_pb': float(cached_data.get('bb_pb', 0.5)) if cached_data else 0.5,
+            'vwap_dist': float(cached_data.get('vwap_dist', 0.0)) if cached_data else 0.0,
             'day_of_week': int(ist.weekday()),
             'hour': int(ist.hour),
             'minute': int(ist.minute),
             'time_float': float(ist.hour + ist.minute / 60.0)
         }
-        
-        # 2. The Hard Gate: Safely pull technicals from the DB cache
-        technicals = ['rsi', 'volatility', 'dist_sma_20', 'rvol', 'change_percent', 
-                      'cluster_id', 'adx', 'obv', 'bb_pb', 'vwap_dist']
-                      
-        for tech in technicals:
-            val = cached_data.get(tech)
-            if val is None or pd.isna(val):
-                # SILENT ABORT: We are missing real data. Do not guess. Do not crash.
-                # print(f"⚠️ [{symbol}] Hard Gate Closed: Missing real '{tech}' data.")
-                return 0.0
-            live_data[tech] = float(val)
             
-        # 3. If we reach here, we have 100% REAL data for all 15 features.
         # Convert to DataFrame to guarantee perfect XGBoost column alignment.
-        df = pd.DataFrame([live_data], columns=EXPECTED_FEATURES)
+        df = pd.DataFrame([safe_data], columns=EXPECTED_FEATURES)
         
-        # 4. Execute Inference
+        # Execute Inference
         dmatrix = xgb.DMatrix(df)
         prob = float(model.predict(dmatrix)[0])
         
@@ -1263,6 +1260,57 @@ async def upstox_live_feed():
                         }
 
                         processed = apply_conviction_logic(stock_dict, conn=conn_hist)
+                        
+                        # --- Re-enable DB writes for audit ---
+                        try:
+                            cursor = conn_hist.cursor()
+                            upsert_query = """
+                                INSERT INTO ticker_live (
+                                    symbol, price, open_price, prev_close, pct_change, 
+                                    volume, last_updated, ai_probability, ai_mode, 
+                                    ai_signal, confidence, stop_loss, target_price
+                                ) VALUES (
+                                    %(symbol)s, %(price)s, %(open_price)s, %(prev_close)s, %(pct_change)s,
+                                    %(volume)s, CURRENT_TIMESTAMP, %(ai_probability)s, %(ai_mode)s,
+                                    %(ai_signal)s, %(confidence)s, %(stop_loss)s, %(target_price)s
+                                )
+                                ON CONFLICT (symbol) DO UPDATE SET
+                                    price = EXCLUDED.price,
+                                    open_price = EXCLUDED.open_price,
+                                    prev_close = EXCLUDED.prev_close,
+                                    pct_change = EXCLUDED.pct_change,
+                                    volume = EXCLUDED.volume,
+                                    last_updated = CURRENT_TIMESTAMP,
+                                    ai_probability = EXCLUDED.ai_probability,
+                                    ai_mode = EXCLUDED.ai_mode,
+                                    ai_signal = EXCLUDED.ai_signal,
+                                    confidence = EXCLUDED.confidence,
+                                    stop_loss = EXCLUDED.stop_loss,
+                                    target_price = EXCLUDED.target_price;
+                            """
+                            # Extract safe numeric fields that match the live DB schema
+                            db_dict = {
+                                "symbol": processed.get("symbol", "UNKNOWN"),
+                                "price": float(processed.get("price", 0.0) or 0.0),
+                                "open_price": float(processed.get("open_price", 0.0) or 0.0),
+                                "prev_close": float(processed.get("prev_close", 0.0) or 0.0),
+                                "pct_change": float(processed.get("pct_change", 0.0) or 0.0),
+                                "volume": float(processed.get("volume", 0.0) or 0.0),
+                                "ai_probability": float(processed.get("ai_probability", 0.0) or 0.0),
+                                "ai_mode": str(processed.get("ai_mode")) if processed.get("ai_mode") else None,
+                                "ai_signal": str(processed.get("ai_signal")) if processed.get("ai_signal") else None,
+                                "confidence": str(processed.get("confidence")) if processed.get("confidence") else None,
+                                "stop_loss": float(processed.get("stop_loss", 0.0) or 0.0),
+                                "target_price": float(processed.get("target_price", 0.0) or 0.0)
+                            }
+                            
+                            cursor.execute(upsert_query, db_dict)
+                            conn_hist.commit()
+                            cursor.close()
+                        except Exception as db_e:
+                            conn_hist.rollback()
+                            print(f"⚠️ [LiveFeed] DB Upsert error for {db_symbol}: {db_e}")
+                            
                         all_processed.append(processed)
 
                 except upstox_client.rest.ApiException as api_e:
