@@ -1262,50 +1262,39 @@ async def upstox_live_feed():
                         processed = apply_conviction_logic(stock_dict, conn=conn_hist)
                         
                         # --- Re-enable DB writes for audit ---
+                        # 1. Extract values safely matching the ticker_live schema
+                        db_price = float(price)
+                        db_pct_change = float(processed.get('pct_change', 0.0)) if processed else 0.0
+                        db_rvol = float(processed.get('rvol', 1.0)) if processed else 1.0
+                        
+                        # Determine AI Signal based on your probability (adjust thresholds as needed)
+                        db_confidence = float(processed.get('ai_probability', 0.0)) if processed else 0.0
+                        if db_confidence > 0.65:
+                            db_ai_signal = 'SNIPER_BUY'
+                        elif db_confidence < 0.35:
+                            db_ai_signal = 'VOYAGER_SELL'
+                        else:
+                            db_ai_signal = 'NEUTRAL'
+                        
+                        # 2. Execute exact schema Upsert
                         try:
                             cursor = conn_hist.cursor()
-                            upsert_query = """
-                                INSERT INTO ticker_live (
-                                    symbol, price, pct_change, 
-                                    volume, last_updated, ai_probability, ai_mode, 
-                                    ai_signal, confidence, stop_loss, target_price
-                                ) VALUES (
-                                    %(symbol)s, %(price)s, %(pct_change)s,
-                                    %(volume)s, CURRENT_TIMESTAMP, %(ai_probability)s, %(ai_mode)s,
-                                    %(ai_signal)s, %(confidence)s, %(stop_loss)s, %(target_price)s
-                                )
+                            cursor.execute("""
+                                INSERT INTO ticker_live (symbol, price, pct_change, rvol, ai_signal, confidence)
+                                VALUES (%s, %s, %s, %s, %s, %s)
                                 ON CONFLICT (symbol) DO UPDATE SET
                                     price = EXCLUDED.price,
                                     pct_change = EXCLUDED.pct_change,
-                                    volume = EXCLUDED.volume,
-                                    last_updated = CURRENT_TIMESTAMP,
-                                    ai_probability = EXCLUDED.ai_probability,
-                                    ai_mode = EXCLUDED.ai_mode,
+                                    rvol = EXCLUDED.rvol,
                                     ai_signal = EXCLUDED.ai_signal,
                                     confidence = EXCLUDED.confidence,
-                                    stop_loss = EXCLUDED.stop_loss,
-                                    target_price = EXCLUDED.target_price;
-                            """
-                            # Extract safe numeric fields that match the live DB schema
-                            db_dict = {
-                                "symbol": processed.get("symbol", "UNKNOWN"),
-                                "price": float(processed.get("price", 0.0) or 0.0),
-                                "pct_change": float(processed.get("pct_change", 0.0) or 0.0),
-                                "volume": float(processed.get("volume", 0.0) or 0.0),
-                                "ai_probability": float(processed.get("ai_probability", 0.0) or 0.0),
-                                "ai_mode": str(processed.get("ai_mode")) if processed.get("ai_mode") else None,
-                                "ai_signal": str(processed.get("ai_signal")) if processed.get("ai_signal") else None,
-                                "confidence": str(processed.get("confidence")) if processed.get("confidence") else None,
-                                "stop_loss": float(processed.get("stop_loss", 0.0) or 0.0),
-                                "target_price": float(processed.get("target_price", 0.0) or 0.0)
-                            }
-                            
-                            cursor.execute(upsert_query, db_dict)
+                                    timestamp = CURRENT_TIMESTAMP;
+                            """, (db_symbol, db_price, db_pct_change, db_rvol, db_ai_signal, db_confidence))
                             conn_hist.commit()
                             cursor.close()
-                        except Exception as db_e:
+                        except Exception as db_err:
                             conn_hist.rollback()
-                            print(f"⚠️ [LiveFeed] DB Upsert error for {db_symbol}: {db_e}")
+                            print(f"❌ [DB Error] Failed to upsert {db_symbol}: {db_err}")
                             
                         all_processed.append(processed)
 
