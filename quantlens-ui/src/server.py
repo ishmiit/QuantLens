@@ -218,22 +218,25 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
-def get_instrument_key(clean_symbol):
-    clean_symbol = clean_symbol.split(':')[-1]
-    clean_name = clean_symbol.upper().strip()
-    if "NIFTY_50" in clean_name:
-        return INSTRUMENT_MAP.get("NIFTY 50") or "NSE_INDEX|Nifty 50"
-    elif "SENSEX" in clean_name:
-        return INSTRUMENT_MAP.get("SENSEX") or "BSE_INDEX|SENSEX"
-    elif "NIFTY_BANK" in clean_name:
-        return INSTRUMENT_MAP.get("NIFTY BANK") or "NSE_INDEX|Nifty Bank"
-        
-    if clean_name == "LTM":
-        return INSTRUMENT_MAP.get("LTM") or INSTRUMENT_MAP.get("LTIM")
-    elif clean_name == "LTIM":
-        return INSTRUMENT_MAP.get("LTIM") or INSTRUMENT_MAP.get("LTM")
-        
-    return INSTRUMENT_MAP.get(clean_name)
+def get_instrument_key(symbol):
+    symbol = symbol.split(':')[-1].upper().strip()
+    
+    # Force strict Upstox index formatting
+    if symbol in ['NIFTY 50', 'NIFTY_50', 'NIFTY50']:
+        instrument_key = 'NSE_INDEX|Nifty 50'
+    elif symbol in ['BANK NIFTY', 'NIFTY BANK', 'NIFTY_BANK']:
+        instrument_key = 'NSE_INDEX|Nifty Bank'
+    elif symbol == 'SENSEX':
+        instrument_key = 'BSE_INDEX|SENSEX'
+    else:
+        if symbol == "LTM":
+            instrument_key = INSTRUMENT_MAP.get("LTM") or INSTRUMENT_MAP.get("LTIM")
+        elif symbol == "LTIM":
+            instrument_key = INSTRUMENT_MAP.get("LTIM") or INSTRUMENT_MAP.get("LTM")
+        else:
+            instrument_key = INSTRUMENT_MAP.get(symbol)
+            
+    return instrument_key
 
 def fetch_historical_data(clean_symbol, conn):
     global HISTORICAL_CACHE
@@ -767,7 +770,8 @@ async def get_audit(symbol: str):
     if not stock:
         # Debugging: check terminal to see if the symbol actually matched
         print(f"⚠️ Audit Failed: {symbol.upper()} not found in DB.")
-        return {"error": f"Symbol {symbol} not found in live feed"}
+        # Return empty list gracefully instead of raising an exception/warning
+        return {"symbol": symbol, "data": [], "message": "No audit data available in current session."}
 
     # Debugging: check terminal to see if ATR is actually coming from Master
     print(f"✅ Audit Success: {symbol.upper()} - ATR: {stock.get('atr')}, Price: {stock.get('price')}")
