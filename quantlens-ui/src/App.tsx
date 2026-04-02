@@ -514,7 +514,7 @@ function App() {
     <div className="flex flex-col h-screen bg-black text-white font-mono overflow-hidden">
 
       {/* --- ALERT TOAST CONTAINER --- */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+      <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
         {alerts.map((alert) => (
           <div
             key={alert.id}
@@ -577,7 +577,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-y-auto p-6 pb-24 space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-28 md:pb-24 space-y-4 md:space-y-6 flex flex-col bg-gradient-to-b from-black via-zinc-950 to-black">
         {/* DESKTOP INDICES VIEW */}
         <div className="hidden md:grid grid-cols-3 gap-6 shrink-0">
           {[
@@ -731,30 +731,25 @@ function App() {
           </section>
         ) : view === 'convictions' ? (
           <section className="flex-1 bg-gradient-to-br from-[#0d1117] to-black border border-accent-green/10 rounded-2xl overflow-hidden flex flex-col shadow-[0_8px_32px_rgba(57,255,20,0.05)]">
-            <div className="p-6 border-b border-accent-green/10 bg-gradient-to-r from-white/[0.02] to-transparent flex justify-between items-center">
-              <div>
-                <h2 className="text-white font-black tracking-widest text-lg flex items-center gap-2">
-                  <svg className="w-5 h-5 text-accent-green" fill="currentColor" viewBox="0 0 20 20">
+            <div className="p-4 md:p-6 border-b border-accent-green/10 bg-gradient-to-r from-white/[0.02] to-transparent flex flex-col gap-3">
+              {/* TOP ROW: Title + Clear */}
+              <div className="flex justify-between items-center">
+                <h2 className="text-white font-black tracking-widest text-base md:text-lg flex items-center gap-2">
+                  <svg className="w-4 h-4 md:w-5 md:h-5 text-accent-green shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13 7H7v6h6V7z" />
                     <path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd" />
                   </svg>
-                  PORTFOLIO EXECUTIONS
+                  PORTFOLIO
                 </h2>
-                <p className="text-[10px] text-zinc-500 font-bold tracking-tighter mt-1">
-                  LIVE MARKET MONITORING
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4">
                 <button
                   onClick={handleClearAllTrades}
-                  className="px-4 py-1.5 border border-accent-red/30 text-accent-red text-[10px] font-black tracking-widest uppercase rounded hover:bg-accent-red/10 transition-all"
+                  className="px-3 py-1 border border-accent-red/30 text-accent-red text-[9px] md:text-[10px] font-black tracking-widest uppercase rounded hover:bg-accent-red/10 transition-all"
                 >
-                  TRUNCATE DATABASE (CLEAR ALL)
+                  CLEAR ALL
                 </button>
               </div>
 
-              {/* LIVE PORTFOLIO HEADER MATH */}
+              {/* BOTTOM ROW: P&L Summary */}
               {(() => {
                 let totalInvested = 0;
                 let currentLiveValue = 0;
@@ -771,7 +766,6 @@ function App() {
                   if (isLong) {
                     currentLiveValue += (spot * qty);
                   } else {
-                    // Short Selling: Profit when spot < entry
                     const diff = (entry - spot) * qty;
                     currentLiveValue += (entry * qty) + diff;
                   }
@@ -782,16 +776,16 @@ function App() {
                 const isPositive = totalPnL >= 0;
 
                 return (
-                  <div className={`flex items-center gap-8 px-6 py-2 border rounded-xl bg-opacity-10 backdrop-blur-md ${isPositive ? 'border-accent-green/30 bg-accent-green/5' : 'border-accent-red/30 bg-accent-red/5'}`}>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] text-zinc-500 font-black tracking-widest uppercase">Total P&L</span>
-                      <span className={`text-xl font-mono font-black ${isPositive ? 'text-accent-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' : 'text-accent-red drop-shadow-[0_0_8px_rgba(255,49,49,0.5)]'}`}>
+                  <div className={`flex items-center gap-4 md:gap-8 px-4 md:px-6 py-2 border rounded-xl backdrop-blur-md w-full ${isPositive ? 'border-accent-green/30 bg-accent-green/5' : 'border-accent-red/30 bg-accent-red/5'}`}>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-zinc-500 font-black tracking-widest uppercase">Total P&L</span>
+                      <span className={`text-lg md:text-xl font-mono font-black ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
                         {isPositive ? '+' : ''}₹{totalPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="flex flex-col items-end border-l border-white/10 pl-6">
-                      <span className="text-[10px] text-zinc-500 font-black tracking-widest uppercase">Net Return</span>
-                      <span className={`text-lg font-mono font-black ${isPositive ? 'text-accent-green block' : 'text-accent-red block'}`}>
+                    <div className="flex flex-col border-l border-white/10 pl-4 md:pl-6">
+                      <span className="text-[9px] text-zinc-500 font-black tracking-widest uppercase">Net Return</span>
+                      <span className={`text-base md:text-lg font-mono font-black ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
                         {isPositive ? '+' : ''}{totalPct.toFixed(2)}%
                       </span>
                     </div>
@@ -800,14 +794,15 @@ function App() {
               })()}
             </div>
 
-            <div className="flex items-center px-10 py-3 text-[10px] text-zinc-500 uppercase font-black tracking-[0.2em] bg-gradient-to-r from-white/[0.02] to-transparent border-b border-accent-green/5">
+            {/* Desktop column headers — hidden on mobile */}
+            <div className="hidden md:flex items-center px-10 py-3 text-[10px] text-zinc-500 uppercase font-black tracking-[0.2em] bg-gradient-to-r from-white/[0.02] to-transparent border-b border-accent-green/5">
               <span className="w-[15%]">Position</span>
-              <span className="w-[10%] text-right text-zinc-400">Total Qty</span>
+              <span className="w-[10%] text-right text-zinc-400">Qty</span>
               <span className="w-[20%] text-right text-zinc-300">Avg Entry</span>
-              <span className="w-[15%] text-right text-white">Live Spot</span>
+              <span className="w-[15%] text-right text-white">Spot</span>
               <span className="w-[15%] text-right">Net %</span>
-              <span className="w-[15%] text-right text-white">Live P&L</span>
-              <span className="w-[10%] text-right pr-2">Action</span>
+              <span className="w-[15%] text-right text-white">P&L</span>
+              <span className="w-[10%] text-right pr-2">Exit</span>
             </div>
 
             <div className="flex-1 overflow-auto custom-scrollbar pb-10">
@@ -872,10 +867,49 @@ function App() {
                   const isNearSL = pos.isLong ? spot <= pos.stop_loss * 1.005 : spot >= pos.stop_loss * 0.995;
 
                   return (
-                    <div key={pos.symbol} className="group relative border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors duration-200">
+                    <div key={pos.symbol} className="group relative border-b border-white/[0.05] transition-colors duration-200">
 
-                      {/* PRIMARY ROW (Aggregated Position) */}
-                      <div className="flex items-center px-10 py-4 cursor-default z-10 relative">
+                      {/* MOBILE CARD VIEW */}
+                      <div className="md:hidden p-4 flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-black text-white text-lg tracking-wide">{pos.symbol}</span>
+                            <div className="flex gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border uppercase ${pos.trade_type === 'LIVE' ? 'border-accent-green text-accent-green bg-accent-green/5' : 'border-blue-500 text-blue-500 bg-blue-500/5'}`}>
+                                {pos.trade_type}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[8px] text-zinc-500 font-black border border-zinc-700 bg-zinc-800/50 uppercase">
+                                {pos.lots.length} LOT{pos.lots.length > 1 ? 'S' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className={`text-xl font-mono font-black ${livePnL >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                              {livePnL >= 0 ? '+' : '-'}₹{Math.abs(livePnL).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                            </span>
+                            <span className={`text-sm font-bold font-mono ${pctChange >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                              {pctChange > 0 ? '+' : ''}{pctChange.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-[10px] text-zinc-500 font-mono">Spot: <span className="text-zinc-300">₹{spot.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); pos.lots.forEach(lot => handleCloseTrade(lot.symbol, lot.id)); }}
+                            className="px-3 py-1 bg-zinc-900 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase rounded hover:bg-accent-red/20 hover:text-accent-red hover:border-accent-red/50 transition-all"
+                          >
+                            EXIT
+                          </button>
+                        </div>
+                        {(isNearTarget || isNearSL) && (
+                          <div className={`text-[9px] font-black tracking-widest px-2 py-1 rounded border text-center ${isNearTarget ? 'text-accent-green border-accent-green/30 bg-accent-green/10 animate-pulse' : 'text-accent-red border-accent-red/30 bg-accent-red/10 animate-pulse'}`}>
+                            {isNearTarget ? '🎯 TARGET PROXIMITY' : '⚠️ STOP OVERRIDE RISK'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* DESKTOP ROW VIEW */}
+                      <div className="hidden md:flex items-center px-10 py-4 cursor-default z-10 relative hover:bg-white/[0.02]">
                         <div className="w-[15%] flex flex-col gap-1">
                           <span className="font-black text-white text-[15px] tracking-wide group-hover:text-accent-green transition-colors">
                             {pos.symbol}
@@ -889,34 +923,20 @@ function App() {
                             </span>
                           </div>
                         </div>
-
-                        <div className="w-[10%] text-right text-zinc-400 font-mono text-[13px]">
-                          {pos.totalQty}
-                        </div>
-
-                        <div className="w-[20%] text-right text-zinc-400 font-mono text-[13px]">
-                          ₹{avgEntry.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-
+                        <div className="w-[10%] text-right text-zinc-400 font-mono text-[13px]">{pos.totalQty}</div>
+                        <div className="w-[20%] text-right text-zinc-400 font-mono text-[13px]">₹{avgEntry.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         <div className="w-[15%] text-right font-mono text-[14px]">
                           <PriceDisplay price={spot} className="text-zinc-100" prefix="₹" />
                         </div>
-
                         <div className={`w-[15%] text-right font-mono font-bold text-[14px] ${pctChange >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
                           {pctChange > 0 ? '+' : ''}{pctChange.toFixed(2)}%
                         </div>
-
                         <div className={`w-[15%] text-right font-mono font-black text-[15px] ${livePnL >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
                           {livePnL >= 0 ? '+' : '-'}₹{Math.abs(livePnL).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
-
                         <div className="w-[10%] flex justify-end pr-2">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Close all lots associated with this symbol
-                              pos.lots.forEach(lot => handleCloseTrade(lot.symbol, lot.id));
-                            }}
+                            onClick={(e) => { e.stopPropagation(); pos.lots.forEach(lot => handleCloseTrade(lot.symbol, lot.id)); }}
                             className="px-4 py-1.5 bg-zinc-900 border border-zinc-700 text-zinc-300 text-[10px] font-black tracking-widest uppercase rounded cursor-pointer hover:bg-accent-red/20 hover:text-accent-red hover:border-accent-red/50 transition-all"
                           >
                             EXIT ALL
@@ -990,30 +1010,28 @@ function App() {
               })()}
 
               {activeTrades.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full opacity-20 py-20">
-                  <div className="text-center space-y-4">
-                    <svg className="w-16 h-16 mx-auto text-accent-green/30 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    <span className="text-sm font-bold tracking-[0.5em]">WAITING FOR SIGNALS...</span>
-                  </div>
+                <div className="flex flex-col items-center justify-center flex-1 py-24">
+                  <svg className="w-12 h-12 text-zinc-800 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <span className="text-xs font-bold tracking-[0.4em] text-zinc-700 uppercase">Waiting for signals</span>
                 </div>
               )}
             </div>
           </section>
         ) : (
-          /* --- NEW FORGE VIEW START --- */
-          <section className="flex-1 flex flex-col gap-4 animate-slide-in p-2">
+          /* --- FORGE VIEW (MINIMAL, MOBILE-FIRST) --- */
+          <section className="flex-1 flex flex-col gap-4 animate-slide-in">
 
-            {/* 1. SEARCH & AUDIT HEADER */}
-            <div className="flex justify-between items-end bg-zinc-950 border border-zinc-800 p-4 rounded-sm shadow-xl shrink-0">
-              <div>
+            {/* SEARCH & AUDIT HEADER */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end bg-zinc-950 border border-zinc-800 p-4 rounded-xl shadow-xl gap-3">
+              <div className="w-full sm:w-auto">
                 <label className="text-[10px] text-zinc-500 font-bold tracking-[0.2em] mb-1 block">SECURITY IDENTIFIER</label>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center bg-black border border-zinc-700 px-3 py-1.5 focus-within:border-accent-green transition-colors">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-black border border-zinc-700 px-3 py-2 focus-within:border-accent-green transition-colors flex-1 sm:flex-initial">
                     <span className="text-zinc-600 mr-2 text-sm">►</span>
                     <input
-                      className="bg-transparent border-none outline-none text-2xl text-white font-mono tracking-widest uppercase w-48"
+                      className="bg-transparent border-none outline-none text-xl text-white font-mono tracking-widest uppercase w-full sm:w-36"
                       placeholder="TICKER"
                       value={forgeSearch}
                       onChange={(e) => setForgeSearch(e.target.value.toUpperCase())}
@@ -1022,91 +1040,65 @@ function App() {
                   </div>
                   <button
                     onClick={() => runAudit(forgeSearch)}
-                    className="bg-zinc-800 hover:bg-accent-green text-zinc-300 hover:text-black px-6 py-2.5 font-bold text-xs tracking-widest transition-colors uppercase border border-zinc-700 hover:border-accent-green"
+                    className="bg-zinc-800 hover:bg-accent-green text-zinc-300 hover:text-black px-5 py-2.5 font-bold text-xs tracking-widest transition-colors uppercase border border-zinc-700 hover:border-accent-green shrink-0"
                   >
-                    {isAuditing ? "SCANNING..." : "LOAD ASSET"}
+                    {isAuditing ? 'SCANNING...' : 'LOAD'}
                   </button>
                 </div>
               </div>
-
-              <div className="text-right flex flex-col items-end">
-                <span className="text-[10px] text-zinc-600 font-bold tracking-[0.2em]">TERMINAL STATUS</span>
-                <span className="text-xs text-accent-green animate-pulse flex items-center gap-2 mt-1">
-                  <span className="w-2 h-2 bg-accent-green rounded-full"></span>
-                  CONNECTED
-                </span>
-              </div>
+              <span className="text-xs text-accent-green animate-pulse flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-accent-green rounded-full"></span>
+                LIVE
+              </span>
             </div>
 
-            <div className="flex gap-4 flex-1 min-h-0">
-              {/* LEFT COLUMN: HERO PANEL & DATA STRIP */}
-              <div className="flex-1 flex flex-col gap-4 min-w-0">
+            {/* MAIN BODY: Gauge + Order Ticket — stacked on mobile, side-by-side on desktop */}
+            <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 max-w-3xl md:mx-auto w-full">
 
-                {/* HERO PANEL: CONFIDENCE */}
-                {(() => {
-                  const confValue = forgeMetrics?.probability || 0;
-                  let confColor = 'text-red-500';
-                  let boxClass = 'border-red-500/20 bg-red-500/5';
-                  let statusText = 'LOW PROBABILITY';
+              {/* AI PROBABILITY GAUGE */}
+              {(() => {
+                const confValue = forgeMetrics?.probability || 0;
+                let confColor = 'text-red-500';
+                let boxClass = 'border-red-500/20 bg-red-500/5';
+                let statusText = 'LOW PROBABILITY';
 
-                  if (confValue > 80) {
-                    confColor = 'text-green-500';
-                    boxClass = 'border-green-500/20 bg-green-500/5';
-                    statusText = 'HIGH CONVICTION';
-                  } else if (confValue > 50) {
-                    confColor = 'text-yellow-500';
-                    boxClass = 'border-yellow-500/20 bg-yellow-500/5';
-                    statusText = 'NEUTRAL / WATCH';
-                  }
+                if (confValue > 80) {
+                  confColor = 'text-green-500';
+                  boxClass = 'border-green-500/20 bg-green-500/5';
+                  statusText = 'HIGH CONVICTION';
+                } else if (confValue > 50) {
+                  confColor = 'text-yellow-500';
+                  boxClass = 'border-yellow-500/20 bg-yellow-500/5';
+                  statusText = 'NEUTRAL / WATCH';
+                }
 
-                  if (!forgeMetrics && !isAuditing) {
-                    confColor = 'text-gray-500';
-                    boxClass = 'border-gray-800 bg-black';
-                    statusText = 'AWAITING INPUT';
-                  }
+                if (!forgeMetrics && !isAuditing) {
+                  confColor = 'text-gray-500';
+                  boxClass = 'border-gray-800 bg-black';
+                  statusText = 'AWAITING INPUT';
+                }
 
-                  return (
-                    <div className={`p-6 shrink-0 rounded-md border text-center flex flex-col justify-center items-center transition-all ${boxClass}`}>
-                      <span className="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase mb-2">QUANT MODEL ODDS</span>
-                      <div className="flex items-baseline gap-1 my-2">
-                        <span className={`text-4xl font-extrabold tabular-nums tracking-tight ${isAuditing ? 'text-gray-600 animate-pulse' : confColor}`}>
-                          {isAuditing ? '--' : confValue}
-                        </span>
-                        <span className={`text-xl font-bold ${isAuditing ? 'text-gray-700' : 'text-gray-500'}`}>%</span>
-                      </div>
-                      <span className={`text-[10px] font-black tracking-widest uppercase ${confColor}`}>{isAuditing ? 'CALCULATING...' : statusText}</span>
+                return (
+                  <div className={`p-8 rounded-xl border text-center flex flex-col justify-center items-center transition-all md:flex-1 ${boxClass}`}>
+                    <span className="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase mb-3">QUANT MODEL ODDS</span>
+                    <div className="flex items-baseline gap-1 my-3">
+                      <span className={`text-7xl md:text-6xl font-extrabold tabular-nums tracking-tight ${isAuditing ? 'text-gray-600 animate-pulse' : confColor}`}>
+                        {isAuditing ? '--' : confValue}
+                      </span>
+                      <span className={`text-3xl font-bold ${isAuditing ? 'text-gray-700' : 'text-gray-500'}`}>%</span>
                     </div>
-                  );
-                })()}
+                    <span className={`text-[11px] font-black tracking-widest uppercase ${confColor}`}>
+                      {isAuditing ? 'CALCULATING...' : statusText}
+                    </span>
+                    {forgeSearch && (
+                      <span className="text-[10px] text-zinc-600 font-mono mt-3 tracking-widest">{forgeSearch}</span>
+                    )}
+                  </div>
+                );
+              })()}
 
-                {/* HIGH-DENSITY DATA STRIP (Secondary Metrics) — 3-col grid */}
-                <div className="grid grid-cols-3 gap-2 mt-3 flex-1 overflow-y-auto custom-scrollbar">
-                  {[
-                    { label: 'RSI', val: forgeMetrics?.rsi?.toFixed(1) || '0.0', desc: (forgeMetrics?.rsi > 60 ? 'Strong' : 'Neutral'), hl: forgeMetrics?.rsi > 60 },
-                    { label: 'Rel Vol', val: forgeMetrics?.rvol?.toFixed(2) || '0.00', desc: 'Flow Div', hl: forgeMetrics?.rvol > 1.5 },
-                    { label: 'SMA20 Dist', val: `${forgeMetrics?.dist_sma20?.toFixed(2) || '0.0'}%`, desc: 'Mean Rev', hl: false },
-                    { label: 'ATR', val: forgeMetrics?.atr?.toFixed(2) || '0.0', desc: 'Daily Rng', hl: false },
-                    { label: '52W Dist', val: `${forgeMetrics?.dist_52wh?.toFixed(2) || '0.0'}%`, desc: 'Breakout', hl: forgeMetrics?.dist_52wh > -5 },
-                    { label: 'Day Perf', val: `${forgeMetrics?.pct_change?.toFixed(2) || '0.0'}%`, desc: 'Intraday', hl: forgeMetrics?.pct_change > 0 },
-                    { label: 'Sector', val: forgeMetrics?.sector || 'N/A', desc: 'Beta Cat', hl: false },
-                    { label: 'Sig Str', val: forgeMetrics?.signal_strength || 'N/A', desc: 'Alpha', hl: false },
-                    { label: 'Signal', val: forgeMetrics?.signal || '---', desc: 'Direction', hl: forgeMetrics?.signal === 'BUY' },
-                  ].map((box, i) => (
-                    <div key={i} className="bg-zinc-950 border border-zinc-800 p-2 rounded overflow-hidden flex flex-col justify-between min-h-[52px]">
-                      <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mb-0.5 truncate">{box.label}</span>
-                      <div>
-                        <span className={`text-[11px] font-mono font-bold block truncate ${isAuditing ? 'text-zinc-700 animate-pulse' : (box.hl ? 'text-accent-green' : 'text-zinc-300')}`}>
-                          {isAuditing ? '---' : box.val}
-                        </span>
-                        <span className="text-[8px] text-zinc-700 uppercase tracking-widest block truncate">{isAuditing ? 'SCANNING' : box.desc}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* RIGHT COLUMN: INSTITUTIONAL ORDER TICKET */}
-              <div className="w-72 lg:w-80 flex flex-col bg-black border border-zinc-800 shrink-0">
+              {/* ORDER TICKET */}
+              <div className="w-full md:w-80 flex flex-col bg-black border border-zinc-800 rounded-xl shrink-0 overflow-hidden">
                 {/* Ticket Header */}
                 <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-950 flex justify-between items-center">
                   <span className="text-[10px] text-zinc-400 font-black tracking-[0.2em] uppercase">Execution Ticket</span>
