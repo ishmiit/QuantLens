@@ -605,8 +605,8 @@ function App() {
           })}
         </div>
 
-        {/* MOBILE INDICES STRIP — single-line, tighter labels */}
-        <div className="flex md:hidden flex-row items-center justify-between w-full px-3 py-1.5 bg-black border-b border-zinc-900 shrink-0 gap-2">
+        {/* MOBILE INDICES STRIP — prominent numbers, easier to skim */}
+        <div className="flex md:hidden flex-row items-center justify-between w-full px-4 py-2 bg-black border-b border-zinc-900 shrink-0">
           {[
             { label: 'NF50',  searchTerms: ["NIFTY 50", "NIFTY50"] },
             { label: 'SNX',   searchTerms: ["SENSEX"] },
@@ -615,12 +615,12 @@ function App() {
             const data = getIndexData(idx.searchTerms);
             const pct  = data?.change_percent ?? 0;
             return (
-              <div key={idx.label} className="flex items-baseline gap-1.5 min-w-0">
-                <span className="text-[9px] text-zinc-500 font-black uppercase tracking-tight shrink-0">{idx.label}</span>
-                <span className="text-[11px] font-mono font-bold text-white tabular-nums truncate">
+              <div key={idx.label} className="flex flex-col items-center gap-0.5">
+                <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">{idx.label}</span>
+                <span className="text-sm font-bold font-mono text-white tabular-nums">
                   {data ? data.price?.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '---'}
                 </span>
-                <span className={`text-[9px] font-bold shrink-0 ${pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                <span className={`text-[10px] font-bold ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                 </span>
               </div>
@@ -659,11 +659,12 @@ function App() {
               </div>
             </div>
 
-            <div className="flex items-center px-10 py-3 text-[10px] text-zinc-500 uppercase font-black tracking-[0.2em] bg-gradient-to-r from-white/[0.02] to-transparent border-b border-accent-green/5">
-              <span className="w-1/4">Identifier</span>
-              <span className="w-1/4 text-right">LTP (INR)</span>
-              <span className="w-1/4 text-right">Day Change</span>
-              <span className="w-1/4 text-right pr-6">RVOL Index</span>
+            {/* Column headers: RVOL hidden on mobile */}
+            <div className="flex items-center px-4 md:px-10 py-3 text-[10px] text-zinc-500 uppercase font-black tracking-[0.2em] bg-gradient-to-r from-white/[0.02] to-transparent border-b border-accent-green/5">
+              <span className="flex-1 md:w-2/4">Identifier</span>
+              <span className="w-1/3 md:w-1/4 text-right">LTP (INR)</span>
+              <span className="w-1/3 md:w-1/4 text-right">Day Change</span>
+              <span className="hidden md:block w-1/4 text-right pr-6">RVOL Index</span>
             </div>
 
             <div ref={parentRef} className="flex-1 overflow-auto custom-scrollbar">
@@ -684,12 +685,13 @@ function App() {
                       }}
                       className="flex items-center px-10 border-b border-white/[0.03] hover:bg-gradient-to-r hover:from-accent-green/5 hover:to-transparent transition-all duration-200 group"
                     >
-                      <div className="w-1/4 flex items-center gap-3">
+                      {/* Identifier: expands on mobile since RVOL is hidden */}
+                      <div className="flex-1 md:w-2/4 flex items-center gap-2 md:gap-3 min-w-0">
                         <div className={`w-1 h-5 rounded-full transition-all duration-300 shrink-0 ${(s.change_percent ?? 0) >= 0
                           ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
                           : 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'
                           }`} />
-                        <span className="font-black text-white text-[11px] tracking-tight group-hover:text-accent-green transition-colors truncate">
+                        <span className="font-black text-white text-[11px] md:text-[12px] tracking-tight group-hover:text-accent-green transition-colors truncate">
                           {cleanSymbol(s.symbol)}
                         </span>
                         <button
@@ -699,22 +701,23 @@ function App() {
                           FORGE
                         </button>
                       </div>
-                      <div className="w-1/4 text-right">
+                      <div className="w-1/3 md:w-1/4 text-right">
                         <PriceDisplay
                           price={s.price ?? 0}
                           prefix="₹"
                           className="text-[11px] font-bold tabular-nums text-slate-100"
                         />
                       </div>
-                      <div className="w-1/4 text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black transition-all ${(s.change_percent ?? 0) >= 0
+                      <div className="w-1/3 md:w-1/4 text-right">
+                        <span className={`inline-block px-1.5 md:px-2 py-0.5 rounded text-[10px] font-black transition-all ${(s.change_percent ?? 0) >= 0
                           ? 'text-emerald-400 bg-emerald-400/10'
                           : 'text-red-400 bg-red-400/10'
                           }`}>
                           {(s.change_percent ?? 0) >= 0 ? '+' : ''}{(s.change_percent ?? 0).toFixed(2)}%
                         </span>
                       </div>
-                      <div className="w-1/4 flex items-center justify-end gap-2 pr-4">
+                      {/* RVOL bar — hidden on mobile */}
+                      <div className="hidden md:flex w-1/4 items-center justify-end gap-2 pr-4">
                         <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-accent-green/70 transition-all duration-300"
@@ -1052,8 +1055,8 @@ function App() {
               </span>
             </div>
 
-            {/* MAIN BODY: Gauge + Order Ticket — stacked on mobile, side-by-side on desktop */}
-            <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 max-w-3xl md:mx-auto w-full">
+            {/* MAIN BODY: Gauge + Order Ticket — stacked mobile, 2-column desktop */}
+            <div className="flex flex-col md:grid md:grid-cols-2 md:gap-8 gap-4 flex-1 min-h-0 w-full max-w-6xl md:mx-auto md:items-start">
 
               {/* AI PROBABILITY GAUGE */}
               {(() => {
@@ -1098,7 +1101,7 @@ function App() {
               })()}
 
               {/* ORDER TICKET */}
-              <div className="w-full md:w-80 flex flex-col bg-black border border-zinc-800 rounded-xl shrink-0 overflow-hidden">
+              <div className="w-full flex flex-col bg-black border border-zinc-800 rounded-xl shrink-0 overflow-hidden">
                 {/* Ticket Header */}
                 <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-950 flex justify-between items-center">
                   <span className="text-[10px] text-zinc-400 font-black tracking-[0.2em] uppercase">Execution Ticket</span>
@@ -1237,18 +1240,20 @@ function App() {
       </main>
 
       {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      <div className="flex md:hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-[400px] h-16 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl z-50 items-center justify-evenly px-2">
+      <div className="flex md:hidden fixed bottom-4 left-1/2 transform -translate-x-1/2 w-[92%] max-w-[420px] h-16 rounded-full bg-zinc-950/95 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-50 items-center justify-evenly px-2">
         {['dashboard', 'convictions', 'forge'].map((v) => (
           <button
             key={v}
             onClick={() => setView(v as any)}
-            className={`flex flex-col items-center justify-center flex-1 h-3/4 mx-1 rounded-full transition-all duration-300 ${
+            className={`flex flex-col items-center justify-center flex-1 h-[75%] mx-1 rounded-full transition-all duration-300 ${
               view === v
-              ? 'bg-white text-black font-bold shadow-lg'
-              : 'text-gray-400 font-semibold hover:text-white'
+              ? 'bg-white text-black font-black shadow-lg py-3 px-4'
+              : 'text-zinc-500 font-semibold hover:text-zinc-200'
             }`}
           >
-            <span className="text-[10px] tracking-widest uppercase">{v.slice(0, 4)}</span>
+            <span className={`tracking-widest uppercase ${view === v ? 'text-xs font-black' : 'text-[10px]'}`}>
+              {v === 'convictions' ? 'CONVICT' : v.toUpperCase()}
+            </span>
           </button>
         ))}
       </div>
