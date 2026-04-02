@@ -1266,18 +1266,16 @@ async def upstox_live_feed():
                             cursor = conn_hist.cursor()
                             upsert_query = """
                                 INSERT INTO ticker_live (
-                                    symbol, price, open_price, prev_close, pct_change, 
+                                    symbol, price, pct_change, 
                                     volume, last_updated, ai_probability, ai_mode, 
                                     ai_signal, confidence, stop_loss, target_price
                                 ) VALUES (
-                                    %(symbol)s, %(price)s, %(open_price)s, %(prev_close)s, %(pct_change)s,
+                                    %(symbol)s, %(price)s, %(pct_change)s,
                                     %(volume)s, CURRENT_TIMESTAMP, %(ai_probability)s, %(ai_mode)s,
                                     %(ai_signal)s, %(confidence)s, %(stop_loss)s, %(target_price)s
                                 )
                                 ON CONFLICT (symbol) DO UPDATE SET
                                     price = EXCLUDED.price,
-                                    open_price = EXCLUDED.open_price,
-                                    prev_close = EXCLUDED.prev_close,
                                     pct_change = EXCLUDED.pct_change,
                                     volume = EXCLUDED.volume,
                                     last_updated = CURRENT_TIMESTAMP,
@@ -1292,8 +1290,6 @@ async def upstox_live_feed():
                             db_dict = {
                                 "symbol": processed.get("symbol", "UNKNOWN"),
                                 "price": float(processed.get("price", 0.0) or 0.0),
-                                "open_price": float(processed.get("open_price", 0.0) or 0.0),
-                                "prev_close": float(processed.get("prev_close", 0.0) or 0.0),
                                 "pct_change": float(processed.get("pct_change", 0.0) or 0.0),
                                 "volume": float(processed.get("volume", 0.0) or 0.0),
                                 "ai_probability": float(processed.get("ai_probability", 0.0) or 0.0),
