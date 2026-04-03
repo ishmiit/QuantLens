@@ -839,55 +839,70 @@ async def get_audit(symbol: str):
         if live_price <= 0 and chart_data:
             live_price = chart_data[-1]['close']
 
-        # 4. Build a stock dict and run the full ML conviction pipeline
-        # Try AI_FEATURE_CACHE with all variants (cache may be keyed by either format)
-        features = {}
-        for variant in search_variants:
-            features = AI_FEATURE_CACHE.get(variant)
-            if features:
+        # 4. Grab ML inference details from the in-memory tick if available
+        # This guarantees the Forge audit returns EXACTLY the same prediction
+        # as the live convictions dashboard, rather than recalculating it with
+        # a new time delta.
+        probability = 0.0
+        signal = 'BUY'
+        sl_pct = 2.0
+        tp_pct = 5.0
+        stop_loss = 0.0
+        target_price = 0.0
+        mc_win_rate = 0.0
+        aiMode = None
+        isConviction = False
+
+        found_tick = None
+        for tick in in_memory_ticks:
+            tick_sym = tick.get('symbol', '').upper()
+            tick_bare = tick_sym.split(':')[-1].split('|')[-1].replace('-EQ', '')
+            if tick_sym in search_variants or tick_bare == clean_symbol:
+                found_tick = tick
                 break
-        if not features:
-            features = {
-                'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0
-            }
 
-        stock_dict = {
-            "symbol":     clean_symbol,
-            "price":      live_price,
-            "prev_close": prev_close,
-            "pct_change": pct_change,
-            "live_pct":   pct_change,
-            "rvol":       rvol,
-            "rsi":        features.get('rsi', 50.0),
-            "volatility": features.get('volatility', 0.015),
-            "dist_sma20": features.get('dist_sma_20', 0.0),
-            "cluster_id": features.get('cluster_id', 0),
-            "atr":        features.get('atr', live_price * 0.015),
-        }
+        if found_tick:
+            probability = float(found_tick.get('probability', 0.0))
+            signal = found_tick.get('signal', 'BUY')
+            sl_pct = float(found_tick.get('sl_pct', 2.0))
+            tp_pct = float(found_tick.get('tp_pct', 5.0))
+            stop_loss = float(found_tick.get('stop_loss', 0.0))
+            target_price = float(found_tick.get('target_price', 0.0))
+            mc_win_rate = float(found_tick.get('mc_win_rate', 0.0))
+            aiMode = found_tick.get('aiMode')
+            isConviction = found_tick.get('isConviction', False)
+        else:
+            # Fallback to DB if live feed hasn't caught it yet
+            cur3 = conn.cursor(cursor_factory=RealDictCursor)
+            cur3.execute("""
+                SELECT confidence, ai_signal FROM ticker_live
+                WHERE symbol = ANY(%s) LIMIT 1
+            """, (list(search_variants),))
+            live_row3 = cur3.fetchone()
+            cur3.close()
+            if live_row3:
+                probability = float(live_row3['confidence'] or 0.0)
+                db_sig = str(live_row3['ai_signal'] or '')
+                if 'BUY' in db_sig: signal = 'BUY'
+                elif 'SELL' in db_sig: signal = 'SELL'
 
-        print(f"🔍 [Audit] {clean_symbol} | live_price={live_price} | features_rsi={features.get('rsi')}")
-
-        processed = apply_conviction_logic(stock_dict, conn=conn, run_mc=False)
-
-        # If apply_conviction_logic returned early (price guard), processed won't have
-        # our keys — so we still need to return a useful live_price to the Forge panel.
-        final_price = float(processed.get('price') or 0.0) or live_price
+        print(f"🔍 [Audit] {clean_symbol} | live_price={live_price} | probability={probability}")
 
         return {
             "symbol": clean_symbol,
             "data": chart_data,
             # ─── Fields the Forge panel reads directly ───────────────
-            "price":       round(final_price, 2),
-            "probability": round(float(processed.get('probability') or 0.0), 1),
-            "confidence":  round(float(processed.get('probability') or 0.0), 1),
-            "signal":      processed.get('signal', 'BUY'),
-            "sl_pct":      round(float(processed.get('sl_pct') or 2.0), 2),
-            "tp_pct":      round(float(processed.get('tp_pct') or 5.0), 2),
-            "stop_loss":   round(float(processed.get('stop_loss') or 0.0), 2),
-            "target_price":round(float(processed.get('target_price') or 0.0), 2),
-            "mc_win_rate": round(float(processed.get('mc_win_rate') or 0.0), 1),
-            "aiMode":      processed.get('aiMode'),
-            "isConviction":processed.get('isConviction', False),
+            "price":       round(live_price, 2),
+            "probability": round(probability, 1),
+            "confidence":  round(probability, 1),
+            "signal":      signal,
+            "sl_pct":      round(sl_pct, 2),
+            "tp_pct":      round(tp_pct, 2),
+            "stop_loss":   round(stop_loss, 2),
+            "target_price":round(target_price, 2),
+            "mc_win_rate": round(mc_win_rate, 1),
+            "aiMode":      aiMode,
+            "isConviction":isConviction,
         }
     except Exception as e:
         import traceback
