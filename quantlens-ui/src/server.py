@@ -785,60 +785,87 @@ async def get_audit(symbol: str):
                 "confidence": float(r['confidence'])
             })
 
-        # 2. Fetch the live snapshot from ticker_live so we have a real price
+        # 2. Fetch the live snapshot from ticker_live (kept for reference; main lookup is below)
         cur.execute("""
             SELECT price, pct_change, rvol, ai_signal, confidence
             FROM ticker_live
-            WHERE symbol = %s
+            WHERE symbol = %s LIMIT 1
         """, (clean_symbol,))
         live_row = cur.fetchone()
         cur.close()
 
-        # 3. Also check the in-memory feed as the most up-to-date source
+        # 3. Also check the in-memory feed as the most up-to-date source.
+        # The Upstox SDK stores symbols in colon format: "NSE_EQ:ASHOKLEY"
+        # so we must match flexibly against all known variants.
         live_price = 0.0
         prev_close = 0.0
         pct_change = 0.0
         rvol = 1.0
 
-        # Priority 1: in-memory ticks (freshest)
+        search_variants = {
+            clean_symbol,
+            f"NSE_EQ:{clean_symbol}",
+            f"NSE_EQ:{clean_symbol}-EQ",
+            f"{clean_symbol}-EQ",
+        }
+
+        # Priority 1: in-memory ticks (freshest) — check all symbol variants
         for tick in in_memory_ticks:
-            tick_sym = tick.get('symbol', '')
-            if tick_sym == clean_symbol or tick_sym.replace('-EQ', '') == clean_symbol:
+            tick_sym = tick.get('symbol', '').upper()
+            # Also normalise: split on colon/pipe and strip -EQ to get bare symbol
+            tick_bare = tick_sym.split(':')[-1].split('|')[-1].replace('-EQ', '')
+            if tick_sym in search_variants or tick_bare == clean_symbol:
                 live_price = float(tick.get('price') or 0.0)
                 prev_close = float(tick.get('prev_close') or 0.0)
                 pct_change = float(tick.get('pct_change') or 0.0)
-                rvol = float(tick.get('rvol') or 1.0)
+                rvol       = float(tick.get('rvol') or 1.0)
                 break
 
-        # Priority 2: ticker_live DB row
-        if live_price <= 0 and live_row:
-            live_price = float(live_row['price'] or 0.0)
-            pct_change = float(live_row['pct_change'] or 0.0)
-            rvol = float(live_row['rvol'] or 1.0)
+        # Priority 2: ticker_live DB — query all known symbol variants
+        if live_price <= 0:
+            cur2 = conn.cursor(cursor_factory=RealDictCursor)
+            cur2.execute("""
+                SELECT price, pct_change, rvol FROM ticker_live
+                WHERE symbol = ANY(%s) LIMIT 1
+            """, (list(search_variants),))
+            live_row2 = cur2.fetchone()
+            cur2.close()
+            if live_row2:
+                live_price = float(live_row2['price'] or 0.0)
+                pct_change = float(live_row2['pct_change'] or 0.0)
+                rvol       = float(live_row2['rvol'] or 1.0)
 
-        # Priority 3: last known price from history
+        # Priority 3: last known price from ticker_history (already fetched above)
         if live_price <= 0 and chart_data:
             live_price = chart_data[-1]['close']
 
         # 4. Build a stock dict and run the full ML conviction pipeline
-        #    so probability, sl_pct, tp_pct, signal are all real values
-        features = AI_FEATURE_CACHE.get(clean_symbol, {
-            'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0
-        })
+        # Try AI_FEATURE_CACHE with all variants (cache may be keyed by either format)
+        features = {}
+        for variant in search_variants:
+            features = AI_FEATURE_CACHE.get(variant)
+            if features:
+                break
+        if not features:
+            features = {
+                'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0
+            }
 
         stock_dict = {
-            "symbol": clean_symbol,
-            "price": live_price,
+            "symbol":     clean_symbol,
+            "price":      live_price,
             "prev_close": prev_close,
             "pct_change": pct_change,
-            "live_pct": pct_change,
-            "rvol": rvol,
-            "rsi": features.get('rsi', 50.0),
+            "live_pct":   pct_change,
+            "rvol":       rvol,
+            "rsi":        features.get('rsi', 50.0),
             "volatility": features.get('volatility', 0.015),
             "dist_sma20": features.get('dist_sma_20', 0.0),
             "cluster_id": features.get('cluster_id', 0),
-            "atr": features.get('atr', live_price * 0.015),
+            "atr":        features.get('atr', live_price * 0.015),
         }
+
+        print(f"🔍 [Audit] {clean_symbol} | live_price={live_price} | features_rsi={features.get('rsi')}")
 
         processed = apply_conviction_logic(stock_dict, conn=conn, run_mc=False)
 

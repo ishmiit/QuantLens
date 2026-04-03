@@ -232,11 +232,9 @@ function App() {
         setForgeEntry(backendPrice);
       }
 
-      // Only update the full forgeMetrics object if the response is valid.
-      // A stale/errored response returning price=0 must NOT wipe good existing state.
-      if (backendPrice > 0 || Number(data.probability) > 0) {
-        setForgeMetrics(data);
-      }
+      // Always update forgeMetrics — any response (even probability=0) clears
+      // the "AWAITING INPUT" state which is caused by forgeMetrics being null.
+      setForgeMetrics(data);
 
       // Direct State Integration from Python Backend
       if (data.sl_pct) {
