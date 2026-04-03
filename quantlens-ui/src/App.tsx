@@ -285,19 +285,17 @@ function App() {
     setForgeSearch(symbol);
     setForgeEntry(Number(stock.price) || 0);
 
-    // ── Instant seed from live WebSocket data ──────────────────────────────
-    // The stock object already has probability/signal/sl_pct from apply_conviction_logic
-    // running in the live feed. Set forgeMetrics NOW so the gauge is never blank
-    // while /audit loads in the background.
+    // Seed the Forge instantly from the live WebSocket stock object.
+    // This data is already processed by apply_conviction_logic on the backend
+    // and is the authoritative source — do NOT call runAudit here, as that
+    // would fire a second independent ML inference and overwrite with a
+    // slightly different (stale) result.
     setForgeMetrics(stock);
 
-    // Also pre-populate SL/TP percentages from the live data so the ticket
-    // is usable immediately even before the audit response arrives.
     if (stock.sl_pct) setAiSlPercent(Number(stock.sl_pct) || 2.0);
     if (stock.tp_pct) setAiTargetPercent(Number(stock.tp_pct) || 5.0);
     if (stock.signal) setForgeSignal((stock.signal || 'BUY') as 'BUY' | 'SELL');
 
-    runAudit(symbol);   // still fires to refresh with fresh ML inference
     setView('forge');
   };
 
