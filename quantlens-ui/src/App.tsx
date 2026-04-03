@@ -284,7 +284,20 @@ function App() {
     const symbol = cleanSymbol(stock.symbol).toUpperCase();
     setForgeSearch(symbol);
     setForgeEntry(Number(stock.price) || 0);
-    runAudit(symbol);
+
+    // ── Instant seed from live WebSocket data ──────────────────────────────
+    // The stock object already has probability/signal/sl_pct from apply_conviction_logic
+    // running in the live feed. Set forgeMetrics NOW so the gauge is never blank
+    // while /audit loads in the background.
+    setForgeMetrics(stock);
+
+    // Also pre-populate SL/TP percentages from the live data so the ticket
+    // is usable immediately even before the audit response arrives.
+    if (stock.sl_pct) setAiSlPercent(Number(stock.sl_pct) || 2.0);
+    if (stock.tp_pct) setAiTargetPercent(Number(stock.tp_pct) || 5.0);
+    if (stock.signal) setForgeSignal((stock.signal || 'BUY') as 'BUY' | 'SELL');
+
+    runAudit(symbol);   // still fires to refresh with fresh ML inference
     setView('forge');
   };
 
