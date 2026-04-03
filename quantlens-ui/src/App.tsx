@@ -232,7 +232,11 @@ function App() {
         setForgeEntry(backendPrice);
       }
 
-      setForgeMetrics(data);
+      // Only update the full forgeMetrics object if the response is valid.
+      // A stale/errored response returning price=0 must NOT wipe good existing state.
+      if (backendPrice > 0 || Number(data.probability) > 0) {
+        setForgeMetrics(data);
+      }
 
       // Direct State Integration from Python Backend
       if (data.sl_pct) {
@@ -1166,7 +1170,8 @@ function App() {
                       <span className="text-[10px] text-zinc-500 block uppercase tracking-widest mt-1">Spot Equities</span>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1.5">
-                      <span className="text-lg font-mono font-bold text-zinc-200">₹{(forgeMetrics as any)?.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '---'}</span>
+                      {/* Always use forgeEntry (set from live tick) — never forgeMetrics.price which can be 0 */}
+                      <span className="text-lg font-mono font-bold text-zinc-200">₹{Number(forgeEntry) > 0 ? Number(forgeEntry).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ((forgeMetrics as any)?.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '---')}</span>
                       <div className="flex bg-black border border-zinc-700 p-0.5">
                         <button
                           onClick={() => setForgeSignal('BUY')}

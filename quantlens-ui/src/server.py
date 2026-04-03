@@ -840,13 +840,17 @@ async def get_audit(symbol: str):
             "atr": features.get('atr', live_price * 0.015),
         }
 
-        processed = apply_conviction_logic(stock_dict, conn=conn, run_mc=True)
+        processed = apply_conviction_logic(stock_dict, conn=conn, run_mc=False)
+
+        # If apply_conviction_logic returned early (price guard), processed won't have
+        # our keys — so we still need to return a useful live_price to the Forge panel.
+        final_price = float(processed.get('price') or 0.0) or live_price
 
         return {
             "symbol": clean_symbol,
             "data": chart_data,
             # ─── Fields the Forge panel reads directly ───────────────
-            "price":       round(float(processed.get('price') or live_price), 2),
+            "price":       round(final_price, 2),
             "probability": round(float(processed.get('probability') or 0.0), 1),
             "confidence":  round(float(processed.get('probability') or 0.0), 1),
             "signal":      processed.get('signal', 'BUY'),
