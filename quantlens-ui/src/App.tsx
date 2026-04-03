@@ -224,21 +224,23 @@ function App() {
         return;
       }
 
-      // 1. Force everything to numbers
-      const entryPrice = Number(data.price) || 0;
+      // Only overwrite forgeEntry if the backend returned a real price.
+      // handleSendToForge already set it from the live WebSocket tick —
+      // we must NOT clobber it with 0 if the audit response is missing price.
+      const backendPrice = Number(data.price) || 0;
+      if (backendPrice > 0) {
+        setForgeEntry(backendPrice);
+      }
 
-      setForgeEntry(entryPrice);
       setForgeMetrics(data);
 
-      // 2. Direct State Integration from Python Backend
-      if (entryPrice > 0 && data.sl_pct) {
-        // If we have real data from the ML model, use it natively
-        setAiSlPercent(Number(data.sl_pct) || 0);
-        setAiTargetPercent(Number(data.tp_pct) || 0);
+      // Direct State Integration from Python Backend
+      if (data.sl_pct) {
+        setAiSlPercent(Number(data.sl_pct) || 2.0);
+        setAiTargetPercent(Number(data.tp_pct) || 5.0);
         setForgeSignal((data.signal || 'BUY') as 'BUY' | 'SELL');
       } else {
-        // BITCH, THESE ARE THE DEFAULTS (Only trigger if Python sends 0 or Null)
-        console.warn("Python sent 0 for SL/TP. Using 2%/5% defaults.");
+        console.warn("Backend sent 0 for SL/TP. Using 2%/5% defaults.");
         setAiSlPercent(2.0);
         setAiTargetPercent(5.0);
         setForgeSignal('BUY');

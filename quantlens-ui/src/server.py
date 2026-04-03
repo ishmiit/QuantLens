@@ -758,7 +758,7 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
 
 
 
-# --- NEW: FORGE AUDIT ENDPOINT ---
+# --- FORGE AUDIT ENDPOINT ---
 @app.get("/audit/{symbol}")
 async def get_audit(symbol: str):
     clean_symbol = urllib.parse.unquote(symbol).upper()
@@ -766,6 +766,8 @@ async def get_audit(symbol: str):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # 1. Fetch chart history
         cur.execute("""
             SELECT timestamp, price, ai_signal, confidence 
             FROM ticker_history 
@@ -773,9 +775,7 @@ async def get_audit(symbol: str):
             ORDER BY timestamp ASC
         """, (clean_symbol,))
         rows = cur.fetchall()
-        cur.close()
-        
-        # Format mapping since Frontend expects certain properties
+
         chart_data = []
         for r in rows:
             chart_data.append({
@@ -784,8 +784,80 @@ async def get_audit(symbol: str):
                 "ai_signal": str(r['ai_signal']),
                 "confidence": float(r['confidence'])
             })
-            
-        return {"symbol": clean_symbol, "data": chart_data}
+
+        # 2. Fetch the live snapshot from ticker_live so we have a real price
+        cur.execute("""
+            SELECT price, pct_change, rvol, ai_signal, confidence
+            FROM ticker_live
+            WHERE symbol = %s
+        """, (clean_symbol,))
+        live_row = cur.fetchone()
+        cur.close()
+
+        # 3. Also check the in-memory feed as the most up-to-date source
+        live_price = 0.0
+        prev_close = 0.0
+        pct_change = 0.0
+        rvol = 1.0
+
+        # Priority 1: in-memory ticks (freshest)
+        for tick in in_memory_ticks:
+            tick_sym = tick.get('symbol', '')
+            if tick_sym == clean_symbol or tick_sym.replace('-EQ', '') == clean_symbol:
+                live_price = float(tick.get('price') or 0.0)
+                prev_close = float(tick.get('prev_close') or 0.0)
+                pct_change = float(tick.get('pct_change') or 0.0)
+                rvol = float(tick.get('rvol') or 1.0)
+                break
+
+        # Priority 2: ticker_live DB row
+        if live_price <= 0 and live_row:
+            live_price = float(live_row['price'] or 0.0)
+            pct_change = float(live_row['pct_change'] or 0.0)
+            rvol = float(live_row['rvol'] or 1.0)
+
+        # Priority 3: last known price from history
+        if live_price <= 0 and chart_data:
+            live_price = chart_data[-1]['close']
+
+        # 4. Build a stock dict and run the full ML conviction pipeline
+        #    so probability, sl_pct, tp_pct, signal are all real values
+        features = AI_FEATURE_CACHE.get(clean_symbol, {
+            'rsi': 50.0, 'volatility': 0.015, 'dist_sma_20': 0.0, 'cluster_id': 0
+        })
+
+        stock_dict = {
+            "symbol": clean_symbol,
+            "price": live_price,
+            "prev_close": prev_close,
+            "pct_change": pct_change,
+            "live_pct": pct_change,
+            "rvol": rvol,
+            "rsi": features.get('rsi', 50.0),
+            "volatility": features.get('volatility', 0.015),
+            "dist_sma20": features.get('dist_sma_20', 0.0),
+            "cluster_id": features.get('cluster_id', 0),
+            "atr": features.get('atr', live_price * 0.015),
+        }
+
+        processed = apply_conviction_logic(stock_dict, conn=conn, run_mc=True)
+
+        return {
+            "symbol": clean_symbol,
+            "data": chart_data,
+            # ─── Fields the Forge panel reads directly ───────────────
+            "price":       round(float(processed.get('price') or live_price), 2),
+            "probability": round(float(processed.get('probability') or 0.0), 1),
+            "confidence":  round(float(processed.get('probability') or 0.0), 1),
+            "signal":      processed.get('signal', 'BUY'),
+            "sl_pct":      round(float(processed.get('sl_pct') or 2.0), 2),
+            "tp_pct":      round(float(processed.get('tp_pct') or 5.0), 2),
+            "stop_loss":   round(float(processed.get('stop_loss') or 0.0), 2),
+            "target_price":round(float(processed.get('target_price') or 0.0), 2),
+            "mc_win_rate": round(float(processed.get('mc_win_rate') or 0.0), 1),
+            "aiMode":      processed.get('aiMode'),
+            "isConviction":processed.get('isConviction', False),
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
