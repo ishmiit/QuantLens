@@ -279,16 +279,16 @@ def fetch_historical_data(clean_symbol, conn):
         
     try:
         cur = conn.cursor()
-        # Rosetta Translation: Handle mapping for both clean symbols and raw keys gracefully
+        # The ISIN Rosetta Fix: Query by clean symbol, ISIN, and legacy format
         db_key = get_instrument_key(clean_symbol) if "|" not in clean_symbol else clean_symbol
+        legacy_key = f"NSE_EQ|{clean_symbol}-EQ"
         
-        # Fallback alias for LTM/LTIM corporate action
         if clean_symbol.upper() in ["LTM", "LTIM"]:
-            query = "SELECT timestamp, open, high, low, close, volume FROM ml_training_data_v3 WHERE symbol IN (%s, 'LTIM', 'NSE_EQ|LTIM', 'LTM', 'NSE_EQ|LTM') ORDER BY timestamp DESC LIMIT 50"
-            cur.execute(query, (db_key,))
+            query = "SELECT timestamp, open, high, low, close, volume FROM ml_training_data_v3 WHERE symbol IN (%s, %s, %s, 'LTIM', 'NSE_EQ|LTIM', 'LTM', 'NSE_EQ|LTM') ORDER BY timestamp DESC LIMIT 50"
+            cur.execute(query, (clean_symbol, db_key, legacy_key))
         else:
-            query = "SELECT timestamp, open, high, low, close, volume FROM ml_training_data_v3 WHERE symbol = %s ORDER BY timestamp DESC LIMIT 50"
-            cur.execute(query, (db_key,))
+            query = "SELECT timestamp, open, high, low, close, volume FROM ml_training_data_v3 WHERE symbol IN (%s, %s, %s) ORDER BY timestamp DESC LIMIT 50"
+            cur.execute(query, (clean_symbol, db_key, legacy_key))
             
         rows = cur.fetchall()
         cur.close()
@@ -451,7 +451,14 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         price_raw = stock.get('price')
         price = float(price_raw) if price_raw is not None else 0.0
         
-        # BAD DATA GUARD: Prevents ZeroDivisionError on glitches
+        prev_close_raw = stock.get('prev_close')
+        prev_close = float(prev_close_raw) if prev_close_raw is not None else 0.0
+
+        # 🌙 WEEKEND / OFF-HOURS FALLBACK
+        if price <= 0 and prev_close > 0:
+            price = prev_close
+        
+        # BAD DATA GUARD: Prevents ZeroDivisionError if both are 0
         if price <= 0:
             return stock
         
