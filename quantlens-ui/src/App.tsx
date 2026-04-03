@@ -754,6 +754,35 @@ function App() {
         ) : view === 'convictions' ? (
           <section className="flex-1 bg-gradient-to-br from-[#0d1117] to-black border border-accent-green/10 rounded-2xl overflow-hidden flex flex-col shadow-[0_8px_32px_rgba(57,255,20,0.05)]">
             <div className="p-4 md:p-6 border-b border-accent-green/10 bg-gradient-to-r from-white/[0.02] to-transparent flex flex-col gap-3">
+              {/* LIVE AI CONVICTION RADAR */}
+              {(() => {
+                const activeConvictions = stocks.filter(s => s.isConviction && (s.signal === 'BUY' || s.ai_signal === 'BUY'));
+                if (activeConvictions.length === 0) return null;
+                
+                return (
+                  <div className="mb-4 flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-accent-green rounded-full shadow-[0_0_8px_#39ff14] animate-pulse" />
+                      <span className="text-[10px] text-zinc-500 font-black tracking-widest uppercase">Live AI Signals Detected ({activeConvictions.length})</span>
+                    </div>
+                    <div className="flex overflow-x-auto custom-scrollbar pb-2 gap-2">
+                      {activeConvictions.map(stock => {
+                        const cleanName = cleanSymbol(stock.symbol);
+                        return (
+                          <button
+                            key={stock.symbol}
+                            onClick={() => handleSendToForge(stock)}
+                            className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-accent-green/10 border border-accent-green/30 rounded-md hover:bg-accent-green hover:text-black transition-colors group"
+                          >
+                            <span className="font-black text-xs group-hover:text-black text-white">{cleanName}</span>
+                            <span className="text-[10px] font-mono font-bold group-hover:text-black text-accent-green">{stock.probability || stock.confidence || 0}%</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* TOP ROW: Title + Clear */}
               <div className="flex justify-between items-center">
                 <h2 className="text-white font-black tracking-widest text-base md:text-lg flex items-center gap-2">

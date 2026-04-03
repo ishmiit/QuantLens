@@ -1212,7 +1212,7 @@ async def upstox_live_feed():
                         db_rvol = float(processed.get('rvol', 1.0)) if processed else 1.0
                         
                         # Determine AI Signal based on your probability (adjust thresholds as needed)
-                        db_confidence = float(processed.get('ai_probability', 0.0)) if processed else 0.0
+                        db_confidence = float(processed.get('probability', 0.0)) if processed else 0.0
                         if db_confidence > 0.65:
                             db_ai_signal = 'SNIPER_BUY'
                         elif db_confidence < 0.35:
