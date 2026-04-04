@@ -261,6 +261,23 @@ function App() {
   const slPercNum = Number(aiSlPercent) || 0;
   const tpPercNum = Number(aiTargetPercent) || 0;
 
+  const getTradeGrade = (prob: number, mc: number) => {
+    if (!prob) return { grade: '-', color: 'text-zinc-600', border: 'border-zinc-800' };
+    if (prob >= 70 && mc >= 45) return { grade: 'A', color: 'text-accent-green', border: 'border-accent-green', desc: 'SNIPER SETUP' };
+    if (prob >= 70 && mc < 45) return { grade: 'C', color: 'text-yellow-400', border: 'border-yellow-400', desc: 'VOLATILITY RISK' };
+    if (prob >= 50 && mc >= 35) return { grade: 'B', color: 'text-blue-400', border: 'border-blue-400', desc: 'STANDARD' };
+    return { grade: 'F', color: 'text-accent-red', border: 'border-accent-red', desc: 'DO NOT TRADE' };
+  };
+  
+  const tradeGrade = getTradeGrade(forgeMetrics?.probability, forgeMetrics?.mc_win_rate);
+
+  const handleOptimizeRisk = () => {
+    // Frontend Heuristic: Widens the SL and Target slightly to give the trade room to breathe against chop.
+    // In a future V2, this will ping the backend MC engine in a loop to find the exact local maxima.
+    setAiSlPercent(prev => Number((prev + 0.5).toFixed(1)));
+    setAiTargetPercent(prev => Number((prev + 1.2).toFixed(1)));
+  };
+
   const isShort = forgeSignal === 'SELL';
 
   const calculatedSL = entryNum > 0
@@ -1175,7 +1192,15 @@ function App() {
                   {/* ASSET SUMMARY */}
                   <div className="flex justify-between items-end pb-3 border-b border-zinc-800">
                     <div>
-                      <span className="text-3xl font-black text-white tracking-tight">{forgeSearch || '---'}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl font-black text-white tracking-tight">{forgeSearch || '---'}</span>
+                        {forgeMetrics && !isAuditing && (
+                          <div className={`flex items-center gap-1.5 px-2 py-0.5 border rounded-md bg-black ${tradeGrade.border}`}>
+                            <span className={`text-sm font-black ${tradeGrade.color}`}>{tradeGrade.grade}</span>
+                            <span className={`text-[8px] font-bold tracking-widest uppercase ${tradeGrade.color}`}>{tradeGrade.desc}</span>
+                          </div>
+                        )}
+                      </div>
                       <span className="text-[10px] text-zinc-500 block uppercase tracking-widest mt-1">Spot Equities</span>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1.5">
@@ -1216,9 +1241,18 @@ function App() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
+                        <div className="flex justify-between items-end text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">
                           <span>Stop Loss</span>
-                          <span className="text-red-500">{(aiSlPercent).toFixed(1)}%</span>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={handleOptimizeRisk}
+                              disabled={!forgeMetrics || isAuditing}
+                              className="text-[8px] text-accent-green hover:text-white border border-accent-green/30 hover:border-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <span>⚡</span> OPTIMIZE
+                            </button>
+                            <span className="text-red-500">{(aiSlPercent).toFixed(1)}%</span>
+                          </div>
                         </div>
                         <div className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-right text-sm text-red-500 font-mono">
                           {calculatedSL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
