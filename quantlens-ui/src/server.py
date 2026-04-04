@@ -624,13 +624,17 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         is_conviction = True
         signal = 'BUY' # V6.0 Apex is a Long-Biased model
 
-    # 5.0 Finalize Base SL/TP based on the final decided signal
+    # 5.0 Finalize Base SL/TP based on the final decided signal.
+    # Target must always exceed SL distance by the minimum ratio —
+    # ATR*1.5 can be >2%, so we anchor TP at ATR*3.0 (2:1 ratio).
     if signal == 'BUY':
-        stop_loss = round(price - (safe_atr * 1.5), 2)
-        target_price = round(price * 1.02, 2)
+        sl_distance = safe_atr * 1.5
+        stop_loss    = round(price - sl_distance, 2)
+        target_price = round(price + (sl_distance * 2.0), 2)   # minimum 2:1 RR
     else:
-        stop_loss = round(price + (safe_atr * 1.5), 2)
-        target_price = round(price * 0.98, 2)
+        sl_distance  = safe_atr * 1.5
+        stop_loss    = round(price + sl_distance, 2)
+        target_price = round(price - (sl_distance * 2.0), 2)   # minimum 2:1 RR
 
     # 5.1 LIVE APEX POSITION MANAGEMENT (Ported from backtest.py V6.0)
     current_entry_time = stock.get('entry_time')
@@ -693,7 +697,9 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         stop_loss = stock['stop_loss'] # Synchronize local variable
         stock['exit_reason'] = exit_reason
         
-        # Consistent Target Price update
+        # Target Price: VOYAGER 5%, SNIPER 1%.
+        # These are always relative to the CONVICTION entry, so they should
+        # always beat the trailing SL distance (which starts at ~2% volatility).
         if signal == 'BUY':
             stock['target_price'] = round(price * (1.05 if ai_mode == "VOYAGER (SWING)" else 1.01), 2)
         else:
@@ -712,6 +718,20 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         # Update dictionaries to sync
         stock['stop_loss'] = stop_loss
         stock['target_price'] = target_price
+
+    # 6.4 HARD RISK:REWARD GUARD — enforce minimum 1:2 ratio across ALL code paths.
+    # If the SL distance is >= the TP distance, the setup is invalid.
+    # Push the target price out until RR >= 2:1.
+    if price > 0 and stop_loss != 0 and target_price != 0:
+        sl_dist = abs(price - stop_loss)
+        tp_dist = abs(target_price - price)
+        if tp_dist < sl_dist * 2.0:
+            min_tp_dist = sl_dist * 2.0
+            if signal == 'BUY':
+                target_price = round(price + min_tp_dist, 2)
+            else:
+                target_price = round(price - min_tp_dist, 2)
+            stock['target_price'] = target_price
 
     # 6.5 Calculate Percentage Risks & Monte Carlo Probabilities
     sl_pct = 0.0
