@@ -182,6 +182,14 @@ class ForgeTrade(BaseModel):
     probability: float
     signal: str
 
+class MCSimRequest(BaseModel):
+    symbol: str
+    price: float
+    target: float
+    stop_loss: float
+    probability: float
+    signal: str
+
 class TradePayload(BaseModel):
     symbol: str
     entry_price: float
@@ -967,6 +975,25 @@ async def execute_forge(trade: ForgeTrade):
     finally:
         if conn:
             conn.close()
+
+@app.post("/api/mc-sim")
+async def extract_mc_sim(req: MCSimRequest):
+    try:
+        # Check cache for dynamic volatility, fallback to 1.5%
+        sym_upper = req.symbol.upper()
+        features = AI_FEATURE_CACHE.get(sym_upper)
+        vol_pct = features.get('volatility', 0.015) if features else 0.015
+        
+        # Drift Calculation
+        drift_factor = (req.probability - 50) / 100.0
+        drift_pct = drift_factor * (vol_pct * 0.4)
+        if req.signal == 'SELL': 
+            drift_pct = -drift_pct
+            
+        mc_win_rate = run_monte_carlo(req.price, req.target, req.stop_loss, vol_pct, drift_pct)
+        return {"status": "success", "mc_win_rate": round(mc_win_rate, 1)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # --- ADD TO server.py ---
 @app.post("/close-trade/{symbol}")

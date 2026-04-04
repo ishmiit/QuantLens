@@ -288,6 +288,42 @@ function App() {
     ? (isShort ? entryNum * (1 - tpPercNum / 100) : entryNum * (1 + tpPercNum / 100))
     : 0;
 
+  useEffect(() => {
+    // Only run if we have an active setup and are not already auditing
+    if (!forgeMetrics || isAuditing || entryNum <= 0) return;
+    
+    // Check if values have actually changed from the original metrics
+    // to prevent an infinite feedback loop on initial load
+    if (
+      Math.abs(calculatedSL - (Number(forgeMetrics.stop_loss) || 0)) < 0.01 && 
+      Math.abs(calculatedTarget - (Number(forgeMetrics.target_price) || 0)) < 0.01
+    ) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      fetch(`${API_URL}/api/mc-sim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: forgeSearch,
+          price: entryNum,
+          target: calculatedTarget,
+          stop_loss: calculatedSL,
+          probability: forgeMetrics.probability || 50,
+          signal: forgeSignal
+        }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          setForgeMetrics((prev: any) => ({ ...prev, mc_win_rate: data.mc_win_rate }));
+        }
+      })
+      .catch(err => console.error("MC Sim Recalculation Error:", err));
+    }, 400); // 400ms debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [calculatedSL, calculatedTarget, entryNum, forgeSignal, forgeMetrics?.probability]);
+
   const totalUsed = entryNum * qtyNum;
   const totalRisk = Math.abs(entryNum - calculatedSL) * qtyNum;
 
