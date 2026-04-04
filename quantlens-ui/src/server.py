@@ -411,13 +411,13 @@ def get_live_prediction(model, current_price, cached_data, symbol="Unknown"):
         print(f"❌ [INFERENCE CRASH - {symbol}]: {str(e)}")
         return 0.0
 
-def run_monte_carlo(price, target, stop_loss, volatility_pct, days=20, sims=50000):
+def run_monte_carlo(price, target, stop_loss, volatility_pct, drift_pct=0.0, days=20, sims=50000):
     if price <= 0 or volatility_pct <= 0 or target == stop_loss:
         return 0.0
         
-    # Fully vectorized path generation for 1M simulations
+    # Fully vectorized path generation for 50K simulations
     rand_vals = np.random.normal(0, 1, (sims, days - 1))
-    multipliers = 1 + rand_vals * volatility_pct
+    multipliers = 1 + drift_pct + (rand_vals * volatility_pct)
     paths = np.cumprod(multipliers, axis=1) * price
     
     # Determine which threshold is hit first across the matrix
@@ -744,7 +744,16 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         # Isolate Heavy Monte Carlo execution to only run if requested or for active signals
         if run_mc or is_conviction:
             volatility_pct = safe_atr / price
-            mc_win_rate = run_monte_carlo(price, target_price, stop_loss, volatility_pct)
+            # Determine Drift: If probability is > 50%, add positive bias
+            # scaled by volatility to remain realistic (0.4 multiplier)
+            drift_factor = (probability - 50) / 100.0
+            drift_pct = drift_factor * (volatility_pct * 0.4)
+            
+            # Short-bias inversion if signal is SELL
+            if signal == 'SELL':
+                drift_pct = -drift_pct
+
+            mc_win_rate = run_monte_carlo(price, target_price, stop_loss, volatility_pct, drift_pct)
 
     # 7. Provide Unified Object Back to Frontend
     stock.update({
@@ -911,7 +920,11 @@ async def get_audit(symbol: str):
         # --- NEW: If no simulation exists for this symbol, run it now ---
         if mc_win_rate == 0.0 and live_price > 0:
             vol_pct = (sl_pct / 100.0) / 1.5 if sl_pct > 0 else 0.015
-            mc_win_rate = run_monte_carlo(live_price, target_price, stop_loss, vol_pct)
+            drift_factor = (probability - 50) / 100.0
+            drift_pct = drift_factor * (vol_pct * 0.4)
+            if signal == 'SELL': drift_pct = -drift_pct
+            
+            mc_win_rate = run_monte_carlo(live_price, target_price, stop_loss, vol_pct, drift_pct)
 
         return {
             "symbol": clean_symbol,
