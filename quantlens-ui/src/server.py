@@ -411,7 +411,7 @@ def get_live_prediction(model, current_price, cached_data, symbol="Unknown"):
         print(f"❌ [INFERENCE CRASH - {symbol}]: {str(e)}")
         return 0.0
 
-def run_monte_carlo(price, target, stop_loss, volatility_pct, days=20, sims=1000000):
+def run_monte_carlo(price, target, stop_loss, volatility_pct, days=20, sims=50000):
     if price <= 0 or volatility_pct <= 0 or target == stop_loss:
         return 0.0
         
@@ -741,8 +741,8 @@ def apply_conviction_logic(stock, conn=None, run_mc=False):
         sl_pct = round(abs((price - stop_loss) / price * 100), 2)
         tp_pct = round(abs((target_price - price) / price * 100), 2)
         
-        # Isolate Heavy Monte Carlo execution to only run if requested
-        if run_mc:
+        # Isolate Heavy Monte Carlo execution to only run if requested or for active signals
+        if run_mc or is_conviction:
             volatility_pct = safe_atr / price
             mc_win_rate = run_monte_carlo(price, target_price, stop_loss, volatility_pct)
 
@@ -907,6 +907,11 @@ async def get_audit(symbol: str):
                 elif 'SELL' in db_sig: signal = 'SELL'
 
         print(f"🔍 [Audit] {clean_symbol} | live_price={live_price} | probability={probability}")
+
+        # --- NEW: If no simulation exists for this symbol, run it now ---
+        if mc_win_rate == 0.0 and live_price > 0:
+            vol_pct = (sl_pct / 100.0) / 1.5 if sl_pct > 0 else 0.015
+            mc_win_rate = run_monte_carlo(live_price, target_price, stop_loss, vol_pct)
 
         return {
             "symbol": clean_symbol,

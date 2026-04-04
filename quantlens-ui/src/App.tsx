@@ -1263,7 +1263,7 @@ function App() {
                     </div>
 
                     <div className="flex justify-between text-[10px] font-mono mt-3 pt-3 border-t border-zinc-800/50 items-center">
-                      <span className="text-zinc-500">MC Sim ({isAuditing ? '...' : '1M'} Paths):</span>
+                      <span className="text-zinc-500">Success Chance ({isAuditing ? '...' : '50K'} Paths):</span>
                       <span className={`text-sm font-bold ${isAuditing ? 'text-zinc-600 animate-pulse' :
                         (forgeMetrics?.mc_win_rate >= 60 ? 'text-accent-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' :
                           forgeMetrics?.mc_win_rate < 40 ? 'text-accent-red' : 'text-yellow-400')
