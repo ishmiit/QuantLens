@@ -99,6 +99,7 @@ function App() {
   const [aiSlPercent, setAiSlPercent] = useState(2.0);
   const [aiTargetPercent, setAiTargetPercent] = useState(5.0);
   const [isAuditing, setIsAuditing] = useState(false); // New: Tracks scanning state
+  const [isSimulating, setIsSimulating] = useState(false); // Tracks background MC recalculator
   const [forgeSignal, setForgeSignal] = useState<'BUY' | 'SELL'>('BUY');
   const [isServerAwake, setIsServerAwake] = useState(false);
 
@@ -299,6 +300,8 @@ function App() {
       Math.abs(calculatedTarget - (Number(forgeMetrics.target_price) || 0)) < 0.01
     ) return;
 
+    setIsSimulating(true);
+
     const delayDebounceFn = setTimeout(() => {
       fetch(`${API_URL}/api/mc-sim`, {
         method: 'POST',
@@ -318,10 +321,14 @@ function App() {
           setForgeMetrics((prev: any) => ({ ...prev, mc_win_rate: data.mc_win_rate }));
         }
       })
-      .catch(err => console.error("MC Sim Recalculation Error:", err));
+      .catch(err => console.error("MC Sim Recalculation Error:", err))
+      .finally(() => setIsSimulating(false));
     }, 400); // 400ms debounce
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => {
+      clearTimeout(delayDebounceFn);
+      setIsSimulating(false);
+    };
   }, [calculatedSL, calculatedTarget, entryNum, forgeSignal, forgeMetrics?.probability]);
 
   const totalUsed = entryNum * qtyNum;
@@ -1333,12 +1340,12 @@ function App() {
                     </div>
 
                     <div className="flex justify-between text-[10px] font-mono mt-3 pt-3 border-t border-zinc-800/50 items-center">
-                      <span className="text-zinc-500">Success Chance ({isAuditing ? '...' : '50K'} Paths):</span>
-                      <span className={`text-sm font-bold ${isAuditing ? 'text-zinc-600 animate-pulse' :
+                      <span className="text-zinc-500">Success Chance ({(isAuditing || isSimulating) ? '...' : '50K'} Paths):</span>
+                      <span className={`text-sm font-bold ${(isAuditing || isSimulating) ? 'text-zinc-600 animate-pulse' :
                         (forgeMetrics?.mc_win_rate >= 60 ? 'text-accent-green drop-shadow-[0_0_8px_rgba(57,255,20,0.5)]' :
                           forgeMetrics?.mc_win_rate < 40 ? 'text-accent-red' : 'text-yellow-400')
                         }`}>
-                        {isAuditing ? 'SIMULATING' : (forgeMetrics?.mc_win_rate !== undefined ? `${Number(forgeMetrics.mc_win_rate).toFixed(1)}% WIN` : '---')}
+                        {isAuditing ? 'ANALYZING' : (isSimulating ? 'SIMULATING' : (forgeMetrics?.mc_win_rate !== undefined ? `${Number(forgeMetrics.mc_win_rate).toFixed(1)}% WIN` : '---'))}
                       </span>
                     </div>
                   </div>
